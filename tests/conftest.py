@@ -52,6 +52,30 @@ def test_config():
         },
         "library_cache": {
             "ttl_seconds": 300
+        },
+        "uploads": {
+            "enabled": True,
+            "max_upload_size_mb": 100,
+            "upload_directory": "/tmp/test_media_library/uploads"
+        },
+        "podcasts": {
+            "enabled": True,
+            "check_interval_hours": 6,
+            "auto_download": False,
+            "download_directory": "/tmp/test_media_library/podcasts",
+            "max_episodes_per_feed": 10
+        },
+        "downloads": {
+            "enabled": True,
+            "download_directory": "/tmp/test_media_library/downloads",
+            "ytdlp_format": "best",
+            "articles_directory": "/tmp/test_media_library/articles",
+            "books_directory": "/tmp/test_media_library/books"
+        },
+        "file_naming": {
+            "video_template": "{title} ({year})",
+            "audio_template": "{artist}/{album} ({year})/{track:02d} - {title}",
+            "rename_after_rip": True
         }
     }
 

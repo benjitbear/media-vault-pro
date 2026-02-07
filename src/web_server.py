@@ -19,7 +19,8 @@ from flask import (
 from flask_socketio import SocketIO, emit
 
 from .app_state import AppState
-from .utils import load_config, setup_logger, format_size, format_time, configure_notifications
+from .utils import load_config, setup_logger, format_size, format_time, \
+    configure_notifications, detect_media_type
 
 
 def generate_media_id(file_path: str) -> str:
@@ -127,10 +128,23 @@ class MediaServer:
             return media_items
 
         video_extensions = {'.mp4', '.mkv', '.avi', '.m4v', '.mov'}
+        audio_extensions = {'.mp3', '.flac', '.aac', '.m4a', '.ogg', '.wav', '.opus', '.wma'}
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'}
+        doc_extensions = {'.pdf', '.epub', '.mobi', '.txt', '.html', '.htm'}
+        all_extensions = video_extensions | audio_extensions | image_extensions | doc_extensions
         scanned_ids = set()
 
+        # Skip internal data directories
+        skip_dirs = {'data', '.cache'}
+
         for file_path in self.library_path.rglob('*'):
-            if file_path.suffix.lower() not in video_extensions:
+            if not file_path.is_file():
+                continue
+            # Skip files inside data/thumbnails, data/metadata etc.
+            rel_parts = file_path.relative_to(self.library_path).parts
+            if rel_parts and rel_parts[0] in skip_dirs:
+                continue
+            if file_path.suffix.lower() not in all_extensions:
                 continue
 
             try:
@@ -141,6 +155,7 @@ class MediaServer:
             media_id = generate_media_id(str(file_path))
             scanned_ids.add(media_id)
 
+            media_type = detect_media_type(file_path.name)
             item = {
                 'id': media_id,
                 'title': file_path.stem,
@@ -150,6 +165,7 @@ class MediaServer:
                 'size_formatted': format_size(stat.st_size),
                 'created_at': datetime.fromtimestamp(stat.st_ctime).isoformat(),
                 'modified_at': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                'media_type': media_type,
             }
 
             # Load metadata JSON
@@ -301,7 +317,19 @@ class MediaServer:
                 self.scan_library()
                 item = self.app_state.get_media(media_id)
             if item and item.get('file_path') and os.path.exists(item['file_path']):
-                return self._send_file_partial(item['file_path'])
+                # Determine MIME type from extension
+                ext = Path(item['file_path']).suffix.lower()
+                mime_map = {
+                    '.mp4': 'video/mp4', '.mkv': 'video/x-matroska',
+                    '.avi': 'video/x-msvideo', '.m4v': 'video/mp4',
+                    '.mov': 'video/quicktime',
+                    '.mp3': 'audio/mpeg', '.flac': 'audio/flac',
+                    '.aac': 'audio/aac', '.m4a': 'audio/mp4',
+                    '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+                    '.opus': 'audio/opus', '.wma': 'audio/x-ms-wma',
+                }
+                mimetype = mime_map.get(ext, 'application/octet-stream')
+                return self._send_file_partial(item['file_path'], mimetype=mimetype)
             return jsonify({'error': 'Not found'}), 404
 
         @self.app.route('/api/download/<media_id>')
@@ -432,9 +460,42 @@ class MediaServer:
         @self.app.route('/api/collections/<name>', methods=['PUT'])
         def api_update_collection(name):
             data = request.get_json()
-            if not data or 'media_ids' not in data:
-                return jsonify({'error': 'media_ids required'}), 400
-            self.app_state.update_collection(name, data['media_ids'])
+            if not data:
+                return jsonify({'error': 'Request body required'}), 400
+            media_ids = data.get('media_ids', [])
+            description = data.get('description')
+            collection_type = data.get('collection_type')
+
+            # Create or get existing collection
+            conn = self.app_state._get_conn()
+            row = conn.execute(
+                "SELECT id FROM collections WHERE name = ?", (name,)
+            ).fetchone()
+            if row:
+                col_id = row['id']
+                # Update description/type if provided
+                updates = []
+                vals = []
+                if description is not None:
+                    updates.append("description = ?")
+                    vals.append(description)
+                if collection_type is not None:
+                    updates.append("collection_type = ?")
+                    vals.append(collection_type)
+                if updates:
+                    vals.append(col_id)
+                    conn.execute(
+                        f"UPDATE collections SET {', '.join(updates)} WHERE id = ?",
+                        vals
+                    )
+                    conn.commit()
+            else:
+                col_id = self.app_state.create_collection(
+                    name, description=description or '',
+                    collection_type=collection_type or 'collection')
+
+            if media_ids:
+                self.app_state.update_collection(name, media_ids)
             return jsonify({'status': 'updated'})
 
         @self.app.route('/api/collections/<name>', methods=['DELETE'])
@@ -505,6 +566,203 @@ class MediaServer:
             if user:
                 return jsonify(user)
             return jsonify({'username': None, 'role': 'anonymous'})
+
+        # ─── Upload API ───
+
+        @self.app.route('/api/upload', methods=['POST'])
+        def api_upload():
+            """Upload one or more files to the library"""
+            upload_cfg = self.config.get('uploads', {})
+            if not upload_cfg.get('enabled', True):
+                return jsonify({'error': 'Uploads disabled'}), 403
+
+            max_mb = upload_cfg.get('max_upload_size_mb', 4096)
+            upload_dir = Path(upload_cfg.get(
+                'upload_directory', str(self.library_path / 'uploads')))
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            files = request.files.getlist('files')
+            if not files:
+                return jsonify({'error': 'No files provided'}), 400
+
+            results = []
+            for f in files:
+                if not f.filename:
+                    continue
+                # Sanitize filename
+                safe_name = Path(f.filename).name
+                dest = upload_dir / safe_name
+                # Handle collision
+                counter = 2
+                while dest.exists():
+                    stem = Path(safe_name).stem
+                    suffix = Path(safe_name).suffix
+                    dest = upload_dir / f"{stem} ({counter}){suffix}"
+                    counter += 1
+
+                f.save(str(dest))
+                fsize = dest.stat().st_size
+                if fsize > max_mb * 1024 * 1024:
+                    dest.unlink()
+                    results.append({'file': safe_name, 'error': 'File too large'})
+                    continue
+
+                media_id = generate_media_id(str(dest))
+                media_type = detect_media_type(dest.name)
+                item = {
+                    'id': media_id,
+                    'title': dest.stem,
+                    'filename': dest.name,
+                    'file_path': str(dest),
+                    'file_size': fsize,
+                    'size_formatted': format_size(fsize),
+                    'created_at': datetime.now().isoformat(),
+                    'modified_at': datetime.now().isoformat(),
+                    'media_type': media_type,
+                }
+                self.app_state.upsert_media(item)
+                results.append({'file': dest.name, 'id': media_id,
+                                'media_type': media_type})
+
+            self._cache = None
+            self.app_state.broadcast('library_updated', {})
+            return jsonify({'uploaded': results}), 201
+
+        # ─── Content Ingestion API ───
+
+        @self.app.route('/api/downloads', methods=['POST'])
+        def api_download_content():
+            """Queue a URL for download (YouTube, etc.)"""
+            data = request.get_json()
+            if not data or not data.get('url'):
+                return jsonify({'error': 'url required'}), 400
+            url = data['url']
+            title = data.get('title', url)
+            job_id = self.app_state.create_job(
+                title=title, source_path=url,
+                job_type='download'
+            )
+            return jsonify({'id': job_id, 'status': 'queued'}), 201
+
+        @self.app.route('/api/articles', methods=['POST'])
+        def api_archive_article():
+            """Archive a web article"""
+            data = request.get_json()
+            if not data or not data.get('url'):
+                return jsonify({'error': 'url required'}), 400
+            url = data['url']
+            title = data.get('title', url)
+            job_id = self.app_state.create_job(
+                title=title, source_path=url,
+                job_type='article'
+            )
+            return jsonify({'id': job_id, 'status': 'queued'}), 201
+
+        @self.app.route('/api/books', methods=['POST'])
+        def api_add_book():
+            """Catalogue a book (file upload or metadata)"""
+            data = request.get_json()
+            if not data or not data.get('title'):
+                return jsonify({'error': 'title required'}), 400
+            import uuid
+            book_id = str(uuid.uuid4())[:8]
+            item = {
+                'id': book_id,
+                'title': data['title'],
+                'filename': data.get('filename', ''),
+                'file_path': data.get('file_path', ''),
+                'file_size': 0,
+                'size_formatted': '0 B',
+                'created_at': datetime.now().isoformat(),
+                'modified_at': datetime.now().isoformat(),
+                'media_type': 'document',
+                'source_url': data.get('url'),
+                'artist': data.get('author'),
+                'year': data.get('year'),
+                'overview': data.get('description'),
+            }
+            self.app_state.upsert_media(item)
+            return jsonify({'id': book_id, 'status': 'added'}), 201
+
+        # ─── Podcasts API ───
+
+        @self.app.route('/api/podcasts')
+        def api_podcasts():
+            pods = self.app_state.get_all_podcasts()
+            return jsonify({'podcasts': pods})
+
+        @self.app.route('/api/podcasts', methods=['POST'])
+        def api_add_podcast():
+            data = request.get_json()
+            if not data or not data.get('feed_url'):
+                return jsonify({'error': 'feed_url required'}), 400
+            pod_id = self.app_state.add_podcast(
+                feed_url=data['feed_url'],
+                title=data.get('title', ''),
+                author=data.get('author', ''),
+                description=data.get('description', ''),
+                artwork_url=data.get('artwork_url'),
+            )
+            if pod_id:
+                return jsonify({'id': pod_id, 'status': 'subscribed'}), 201
+            return jsonify({'error': 'Podcast already subscribed'}), 409
+
+        @self.app.route('/api/podcasts/<pod_id>', methods=['DELETE'])
+        def api_delete_podcast(pod_id):
+            if self.app_state.delete_podcast(pod_id):
+                return jsonify({'status': 'deleted'})
+            return jsonify({'error': 'Not found'}), 404
+
+        @self.app.route('/api/podcasts/<pod_id>/episodes')
+        def api_podcast_episodes(pod_id):
+            episodes = self.app_state.get_episodes(pod_id)
+            return jsonify({'episodes': episodes})
+
+        # ─── Playlist Import API ───
+
+        @self.app.route('/api/import/playlist', methods=['POST'])
+        def api_import_playlist():
+            """Import a Spotify/Apple Music playlist as a collection"""
+            data = request.get_json()
+            if not data or not data.get('url'):
+                return jsonify({'error': 'url required'}), 400
+            url = data['url']
+            name = data.get('name', 'Imported Playlist')
+            col_id = self.app_state.create_collection(
+                name=name,
+                description=f'Imported from {url}',
+                collection_type='playlist'
+            )
+            # The actual track fetching will be handled by content_downloader
+            job_id = self.app_state.create_job(
+                title=name, source_path=url,
+                job_type='playlist_import'
+            )
+            return jsonify({'collection_id': col_id, 'job_id': job_id,
+                            'status': 'queued'}), 201
+
+        # ─── Stats API ───
+
+        @self.app.route('/api/stats')
+        def api_stats():
+            """Library statistics"""
+            media = self.app_state.get_all_media()
+            by_type = {}
+            total_size = 0
+            for m in media:
+                mt = m.get('media_type', 'video')
+                by_type[mt] = by_type.get(mt, 0) + 1
+                total_size += m.get('file_size', 0)
+            pods = self.app_state.get_all_podcasts()
+            collections = self.app_state.get_all_collections()
+            return jsonify({
+                'total_items': len(media),
+                'by_type': by_type,
+                'total_size': total_size,
+                'total_size_formatted': format_size(total_size),
+                'podcasts': len(pods),
+                'collections': len(collections),
+            })
 
     # ── WebSocket ────────────────────────────────────────────────
 

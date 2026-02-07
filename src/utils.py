@@ -4,9 +4,11 @@ Utility functions for the media ripper application
 import json
 import logging
 import os
+import re
+import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from logging.handlers import RotatingFileHandler
 
 # Module-level flag for notification suppression
@@ -209,4 +211,176 @@ def print_progress(percent: float, eta: str = None, fps: float = None,
     sys.stdout.flush()
     if percent >= 100:
         sys.stdout.write('\n')
+
+
+# ── File Renaming with Metadata ──────────────────────────────────
+
+def rename_with_metadata(file_path: str, metadata: Dict[str, Any],
+                         logger=None) -> Optional[str]:
+    """
+    Rename a media file using verified metadata.
+    Video: 'Title (Year).ext'
+    Falls back to original name if metadata is insufficient.
+
+    Args:
+        file_path: Current file path
+        metadata: Metadata dict (with 'tmdb' or 'musicbrainz' key)
+        logger: Optional logger
+
+    Returns:
+        New file path, or original if rename not possible/needed
+    """
+    path = Path(file_path)
+    if not path.exists():
+        return file_path
+
+    tmdb = metadata.get('tmdb', {})
+    title = tmdb.get('title')
+    year = tmdb.get('year')
+
+    if not title:
+        if logger:
+            logger.debug(f"No metadata title for rename: {file_path}")
+        return file_path
+
+    # Build new filename: Title (Year).ext
+    if year:
+        new_stem = f"{sanitize_filename(title)} ({year})"
+    else:
+        new_stem = sanitize_filename(title)
+
+    new_name = f"{new_stem}{path.suffix}"
+    new_path = path.parent / new_name
+
+    # Handle collision
+    new_path = _resolve_collision(new_path)
+
+    if new_path == path:
+        return file_path
+
+    try:
+        shutil.move(str(path), str(new_path))
+        if logger:
+            logger.info(f"Renamed: {path.name} -> {new_path.name}")
+        return str(new_path)
+    except Exception as e:
+        if logger:
+            logger.error(f"Rename failed: {e}")
+        return file_path
+
+
+def reorganize_audio_album(album_dir: str, metadata: Dict[str, Any],
+                           base_output_dir: str,
+                           logger=None) -> Optional[str]:
+    """
+    Reorganize audio album tracks using MusicBrainz metadata.
+    Creates: Artist/Album (Year)/## - Title.mp3
+
+    Args:
+        album_dir: Current album directory path
+        metadata: Metadata dict with 'musicbrainz' key
+        base_output_dir: Root output directory
+        logger: Optional logger
+
+    Returns:
+        New album directory path, or original if reorganize not possible
+    """
+    mb = metadata.get('musicbrainz', {})
+    album_title = mb.get('title')
+    artist = mb.get('artist', 'Unknown Artist')
+    year = mb.get('year')
+    tracks = mb.get('tracks', [])
+
+    if not album_title:
+        if logger:
+            logger.debug(f"No MusicBrainz title for audio rename: {album_dir}")
+        return album_dir
+
+    src = Path(album_dir)
+    if not src.is_dir():
+        return album_dir
+
+    # Build new directory: Artist/Album (Year)/
+    safe_artist = sanitize_filename(artist)
+    if year:
+        safe_album = f"{sanitize_filename(album_title)} ({year})"
+    else:
+        safe_album = sanitize_filename(album_title)
+
+    new_dir = Path(base_output_dir) / safe_artist / safe_album
+    new_dir.mkdir(parents=True, exist_ok=True)
+
+    # Rename each track
+    audio_exts = {'.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.aiff'}
+    track_files = sorted([
+        f for f in src.iterdir()
+        if f.suffix.lower() in audio_exts
+    ])
+
+    for i, track_file in enumerate(track_files):
+        # Use MusicBrainz track title if available
+        if i < len(tracks) and tracks[i].get('title'):
+            track_title = sanitize_filename(tracks[i]['title'])
+        else:
+            track_title = track_file.stem
+
+        track_num = i + 1
+        new_name = f"{track_num:02d} - {track_title}{track_file.suffix}"
+        dest = new_dir / new_name
+        dest = _resolve_collision(dest)
+
+        try:
+            shutil.move(str(track_file), str(dest))
+        except Exception as e:
+            if logger:
+                logger.error(f"Failed to move track {track_file.name}: {e}")
+
+    # Remove old empty directory
+    try:
+        if src != new_dir and not any(src.iterdir()):
+            src.rmdir()
+    except Exception:
+        pass
+
+    if logger:
+        logger.info(f"Reorganized album: {safe_artist}/{safe_album}")
+    return str(new_dir)
+
+
+def _resolve_collision(path: Path) -> Path:
+    """Append (2), (3), etc. if file/dir already exists"""
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    parent = path.parent
+    counter = 2
+    while True:
+        candidate = parent / f"{stem} ({counter}){suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def detect_media_type(filename: str) -> str:
+    """
+    Detect media type from file extension.
+
+    Returns one of: video, audio, image, document, other
+    """
+    ext = Path(filename).suffix.lower()
+    video_exts = {'.mp4', '.mkv', '.avi', '.m4v', '.mov', '.webm', '.flv', '.wmv'}
+    audio_exts = {'.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma', '.aiff', '.opus'}
+    image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg'}
+    doc_exts = {'.pdf', '.html', '.htm', '.txt', '.md', '.epub', '.mobi'}
+
+    if ext in video_exts:
+        return 'video'
+    elif ext in audio_exts:
+        return 'audio'
+    elif ext in image_exts:
+        return 'image'
+    elif ext in doc_exts:
+        return 'document'
+    return 'other'
 

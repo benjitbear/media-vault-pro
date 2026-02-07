@@ -4,3 +4,8 @@ simple-websocket>=0.10.0
 requests>=2.31.0
 Pillow>=10.2.0
 python-dotenv>=1.0.0
+
+# Content ingestion (optional — features degrade gracefully if missing)
+yt-dlp>=2024.1.0
+trafilatura>=1.8.0
+feedparser>=6.0.0

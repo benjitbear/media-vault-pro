@@ -53,5 +53,29 @@
     "library_path": "",
     "api_url": "",
     "api_key": ""
+  },
+  "uploads": {
+    "enabled": true,
+    "max_upload_size_mb": 4096,
+    "upload_directory": "/Users/poppemacmini/Media/uploads"
+  },
+  "podcasts": {
+    "enabled": true,
+    "check_interval_hours": 6,
+    "auto_download": true,
+    "download_directory": "/Users/poppemacmini/Media/podcasts",
+    "max_episodes_per_feed": 50
+  },
+  "downloads": {
+    "enabled": true,
+    "download_directory": "/Users/poppemacmini/Media/downloads",
+    "ytdlp_format": "bestvideo[height<=1080]+bestaudio/best",
+    "articles_directory": "/Users/poppemacmini/Media/articles",
+    "books_directory": "/Users/poppemacmini/Media/books"
+  },
+  "file_naming": {
+    "video_template": "{title} ({year})",
+    "audio_template": "{artist}/{album} ({year})/{track:02d} - {title}",
+    "rename_after_rip": true
   }
 }

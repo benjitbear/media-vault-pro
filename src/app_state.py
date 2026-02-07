@@ -79,6 +79,10 @@ class AppState:
                 has_metadata INTEGER DEFAULT 0,
                 collection_name TEXT,
                 tmdb_id INTEGER,
+                media_type TEXT DEFAULT 'video',
+                source_url TEXT,
+                artist TEXT,
+                duration_seconds REAL,
                 added_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -89,6 +93,7 @@ class AppState:
                 title_number INTEGER DEFAULT 1,
                 disc_type TEXT DEFAULT 'dvd',
                 disc_hints TEXT DEFAULT '{}',
+                job_type TEXT DEFAULT 'rip',
                 status TEXT DEFAULT 'queued',
                 progress REAL DEFAULT 0,
                 eta TEXT,
@@ -103,6 +108,8 @@ class AppState:
             CREATE TABLE IF NOT EXISTS collections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT '',
+                collection_type TEXT DEFAULT 'collection',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -128,23 +135,84 @@ class AppState:
                 role TEXT DEFAULT 'user',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS podcasts (
+                id TEXT PRIMARY KEY,
+                feed_url TEXT UNIQUE NOT NULL,
+                title TEXT DEFAULT '',
+                author TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                artwork_url TEXT,
+                artwork_path TEXT,
+                last_checked TEXT,
+                check_interval_hours INTEGER DEFAULT 6,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS podcast_episodes (
+                id TEXT PRIMARY KEY,
+                podcast_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                audio_url TEXT,
+                file_path TEXT,
+                duration_seconds REAL,
+                published_at TEXT,
+                description TEXT DEFAULT '',
+                is_downloaded INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (podcast_id) REFERENCES podcasts(id) ON DELETE CASCADE
+            );
         """)
         conn.commit()
 
-        # Migrate: add username column to sessions if missing (existing DBs)
-        try:
-            conn.execute("SELECT username FROM sessions LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute("ALTER TABLE sessions ADD COLUMN username TEXT")
-            conn.commit()
+        # ── Migrations for existing DBs ──
+        self._migrate(conn)
 
-        # Migrate: add disc_type and disc_hints columns to jobs if missing
-        for col, default in [('disc_type', "'dvd'"), ('disc_hints', "'{}'")]:
+    def _migrate(self, conn):
+        """Add columns/tables that may be missing in older databases."""
+        # ── media table ──
+        for col, default in [
+            ('media_type', "'video'"),
+            ('source_url', 'NULL'),
+            ('artist', 'NULL'),
+            ('duration_seconds', 'NULL'),
+        ]:
+            try:
+                conn.execute(f"SELECT {col} FROM media LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute(f"ALTER TABLE media ADD COLUMN {col} TEXT DEFAULT {default}")
+                conn.commit()
+
+        # ── jobs table ──
+        for col, default in [
+            ('disc_type', "'dvd'"),
+            ('disc_hints', "'{}'"),
+            ('job_type', "'rip'"),
+        ]:
             try:
                 conn.execute(f"SELECT {col} FROM jobs LIMIT 1")
             except sqlite3.OperationalError:
                 conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT DEFAULT {default}")
                 conn.commit()
+
+        # ── collections table ──
+        for col, default in [
+            ('description', "''"),
+            ('collection_type', "'collection'"),
+        ]:
+            try:
+                conn.execute(f"SELECT {col} FROM collections LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute(f"ALTER TABLE collections ADD COLUMN {col} TEXT DEFAULT {default}")
+                conn.commit()
+
+        # ── sessions table ──
+        try:
+            conn.execute("SELECT username FROM sessions LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE sessions ADD COLUMN username TEXT")
+            conn.commit()
 
     def set_socketio(self, socketio):
         """Set the SocketIO instance for broadcasting events"""
@@ -167,8 +235,9 @@ class AppState:
             INSERT INTO media (id, title, filename, file_path, file_size, size_formatted,
                              created_at, modified_at, year, overview, rating, genres,
                              director, cast_members, poster_path, has_metadata,
-                             collection_name, tmdb_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             collection_name, tmdb_id,
+                             media_type, source_url, artist, duration_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, filename=excluded.filename,
                 file_path=excluded.file_path, file_size=excluded.file_size,
@@ -178,7 +247,9 @@ class AppState:
                 genres=excluded.genres, director=excluded.director,
                 cast_members=excluded.cast_members, poster_path=excluded.poster_path,
                 has_metadata=excluded.has_metadata,
-                collection_name=excluded.collection_name, tmdb_id=excluded.tmdb_id
+                collection_name=excluded.collection_name, tmdb_id=excluded.tmdb_id,
+                media_type=excluded.media_type, source_url=excluded.source_url,
+                artist=excluded.artist, duration_seconds=excluded.duration_seconds
         """, (
             item['id'], item['title'], item['filename'], item['file_path'],
             item.get('file_size', 0), item.get('size_formatted', ''),
@@ -187,7 +258,9 @@ class AppState:
             json.dumps(item.get('genres', [])), item.get('director'),
             json.dumps(item.get('cast', [])), item.get('poster_path'),
             1 if item.get('has_metadata') else 0,
-            item.get('collection_name'), item.get('tmdb_id')
+            item.get('collection_name'), item.get('tmdb_id'),
+            item.get('media_type', 'video'), item.get('source_url'),
+            item.get('artist'), item.get('duration_seconds')
         ))
         conn.commit()
 
@@ -219,7 +292,9 @@ class AppState:
         conn = self._get_conn()
         allowed = {
             'title', 'year', 'overview', 'director', 'rating',
-            'genres', 'cast_members', 'collection_name', 'tmdb_id'
+            'genres', 'cast_members', 'collection_name', 'tmdb_id',
+            'media_type', 'source_url', 'artist', 'duration_seconds',
+            'filename', 'file_path',
         }
         set_clauses = []
         values = []
@@ -266,27 +341,35 @@ class AppState:
         d.pop('cast_members', None)
         d['has_metadata'] = bool(d.get('has_metadata'))
         d['has_poster'] = bool(d.get('poster_path'))
+        d.setdefault('media_type', 'video')
+        d.setdefault('source_url', None)
+        d.setdefault('artist', None)
+        d.setdefault('duration_seconds', None)
         return d
 
     # ── Jobs ─────────────────────────────────────────────────────────
 
     def create_job(self, title: str, source_path: str, title_number: int = 1,
                     disc_type: str = 'dvd',
-                    disc_hints: Optional[Dict[str, Any]] = None) -> str:
-        """Create a new rip job, returns job ID"""
+                    disc_hints: Optional[Dict[str, Any]] = None,
+                    job_type: str = 'rip') -> str:
+        """Create a new job, returns job ID.
+        job_type: 'rip' | 'download' | 'upload' | 'podcast'
+        """
         job_id = str(uuid.uuid4())[:8]
         hints_json = json.dumps(disc_hints or {})
         conn = self._get_conn()
         conn.execute("""
             INSERT INTO jobs (id, title, source_path, title_number,
-                             disc_type, disc_hints, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
+                             disc_type, disc_hints, job_type, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)
         """, (job_id, title, source_path, title_number,
-              disc_type, hints_json, datetime.now().isoformat()))
+              disc_type, hints_json, job_type, datetime.now().isoformat()))
         conn.commit()
         self.broadcast('job_created', {'id': job_id, 'title': title,
-                                       'status': 'queued', 'disc_type': disc_type})
-        self.logger.info(f"Job created: {job_id} - {title} ({disc_type})")
+                                       'status': 'queued', 'disc_type': disc_type,
+                                       'job_type': job_type})
+        self.logger.info(f"Job created: {job_id} - {title} ({disc_type}/{job_type})")
         return job_id
 
     def get_all_jobs(self) -> List[Dict[str, Any]]:
@@ -392,10 +475,14 @@ class AppState:
             collections.append(col)
         return collections
 
-    def create_collection(self, name: str) -> int:
+    def create_collection(self, name: str, description: str = '',
+                          collection_type: str = 'collection') -> int:
         """Create a collection, returns ID"""
         conn = self._get_conn()
-        cursor = conn.execute("INSERT INTO collections (name) VALUES (?)", (name,))
+        cursor = conn.execute(
+            "INSERT INTO collections (name, description, collection_type) VALUES (?, ?, ?)",
+            (name, description, collection_type)
+        )
         conn.commit()
         return cursor.lastrowid
 
@@ -539,6 +626,117 @@ class AppState:
                     role=user_def.get('role', 'user')
                 )
                 self.logger.info(f"Seeded default user: {username}")
+
+    # ── Podcasts ─────────────────────────────────────────────────────
+
+    def add_podcast(self, feed_url: str, title: str = '', author: str = '',
+                    description: str = '', artwork_url: str = None) -> str:
+        """Add a podcast subscription, returns podcast ID"""
+        pod_id = str(uuid.uuid4())[:8]
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                INSERT INTO podcasts (id, feed_url, title, author, description, artwork_url)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (pod_id, feed_url, title, author, description, artwork_url))
+            conn.commit()
+            return pod_id
+        except sqlite3.IntegrityError:
+            return None  # feed_url already exists
+
+    def get_all_podcasts(self) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM podcasts ORDER BY title").fetchall()
+        return [dict(r) for r in rows]
+
+    def get_podcast(self, pod_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_conn()
+        row = conn.execute("SELECT * FROM podcasts WHERE id = ?", (pod_id,)).fetchone()
+        return dict(row) if row else None
+
+    def update_podcast(self, pod_id: str, **kwargs):
+        conn = self._get_conn()
+        allowed = {'title', 'author', 'description', 'artwork_url', 'artwork_path',
+                    'last_checked', 'check_interval_hours', 'is_active'}
+        sets, vals = [], []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                vals.append(v)
+        if sets:
+            vals.append(pod_id)
+            conn.execute(f"UPDATE podcasts SET {', '.join(sets)} WHERE id = ?", vals)
+            conn.commit()
+
+    def delete_podcast(self, pod_id: str) -> bool:
+        conn = self._get_conn()
+        result = conn.execute("DELETE FROM podcasts WHERE id = ?", (pod_id,))
+        conn.commit()
+        return result.rowcount > 0
+
+    def get_due_podcasts(self) -> List[Dict[str, Any]]:
+        """Get podcasts that are due for a feed check."""
+        conn = self._get_conn()
+        rows = conn.execute("""
+            SELECT * FROM podcasts
+            WHERE is_active = 1
+              AND (last_checked IS NULL
+                   OR datetime(last_checked, '+' || check_interval_hours || ' hours')
+                      <= datetime('now'))
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Podcast Episodes ─────────────────────────────────────────────
+
+    def add_episode(self, podcast_id: str, title: str, audio_url: str = None,
+                    duration_seconds: float = None, published_at: str = None,
+                    description: str = '') -> Optional[str]:
+        ep_id = str(uuid.uuid4())[:8]
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                INSERT INTO podcast_episodes
+                    (id, podcast_id, title, audio_url, duration_seconds,
+                     published_at, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (ep_id, podcast_id, title, audio_url, duration_seconds,
+                  published_at, description))
+            conn.commit()
+            return ep_id
+        except sqlite3.IntegrityError:
+            return None
+
+    def get_episodes(self, podcast_id: str) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM podcast_episodes WHERE podcast_id = ? ORDER BY published_at DESC",
+            (podcast_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_episode(self, ep_id: str, **kwargs):
+        conn = self._get_conn()
+        allowed = {'file_path', 'is_downloaded', 'duration_seconds'}
+        sets, vals = [], []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                vals.append(v)
+        if sets:
+            vals.append(ep_id)
+            conn.execute(
+                f"UPDATE podcast_episodes SET {', '.join(sets)} WHERE id = ?", vals
+            )
+            conn.commit()
+
+    def episode_exists(self, podcast_id: str, audio_url: str) -> bool:
+        """Check if an episode already exists (by audio URL)"""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM podcast_episodes WHERE podcast_id = ? AND audio_url = ?",
+            (podcast_id, audio_url)
+        ).fetchone()
+        return row is not None
 
     def close(self):
         """Close database connection for current thread"""

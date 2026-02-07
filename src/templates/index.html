@@ -12,6 +12,9 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse-bar { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         .status-pulse { animation: pulse-bar 2s ease-in-out infinite; }
+        .drop-zone { border: 2px dashed transparent; transition: all 0.3s; }
+        .drop-zone.dragover { border-color: #6366f1; background: rgba(99,102,241,0.08); }
+        .type-badge { font-size: 0.65rem; letter-spacing: 0.05em; }
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
@@ -52,6 +55,14 @@
                 <button id="btn-collections" onclick="showTab('collections')"
                     class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
                     📁 Collections
+                </button>
+                <button id="btn-podcasts" onclick="showTab('podcasts')"
+                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
+                    🎙️ Podcasts
+                </button>
+                <button id="btn-add" onclick="showTab('add')"
+                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
+                    ➕ Add Content
                 </button>
                 <button onclick="toggleDarkMode()"
                     class="px-3 py-2 rounded-lg hover:bg-white/30 transition text-sm" title="Toggle dark mode">
@@ -111,6 +122,108 @@
         </div>
     </div>
 
+    <!-- Podcasts Tab -->
+    <div id="tab-podcasts" class="hidden max-w-5xl mx-auto px-5 pb-12">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Podcasts</h2>
+            <button onclick="showSubscribeModal()"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium">
+                + Subscribe
+            </button>
+        </div>
+        <div id="podcasts-list">
+            <p class="text-center py-12 opacity-50">Loading podcasts...</p>
+        </div>
+    </div>
+
+    <!-- Add Content Tab -->
+    <div id="tab-add" class="hidden max-w-3xl mx-auto px-5 pb-12">
+        <h2 class="text-2xl font-bold mb-6">Add Content</h2>
+
+        <!-- Upload Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
+            <h3 class="text-lg font-semibold mb-3">📤 Upload Files</h3>
+            <div id="drop-zone" class="drop-zone rounded-xl p-12 text-center bg-gray-50 dark:bg-gray-700/50 cursor-pointer"
+                 onclick="document.getElementById('file-input').click()">
+                <div class="text-5xl mb-3">📁</div>
+                <p class="font-medium mb-1">Drag &amp; drop files here</p>
+                <p class="text-sm opacity-60">or click to browse &mdash; any file type accepted</p>
+                <input id="file-input" type="file" multiple class="hidden" onchange="handleFileSelect(event)">
+            </div>
+            <div id="upload-progress" class="hidden mt-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div id="upload-bar" class="bg-indigo-500 rounded-full h-2 transition-all" style="width:0%"></div>
+                    </div>
+                    <span id="upload-status" class="text-sm">Uploading...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Video -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
+            <h3 class="text-lg font-semibold mb-3">🎥 Download Video</h3>
+            <p class="text-sm opacity-60 mb-3">YouTube, Vimeo, or any yt-dlp supported URL</p>
+            <div class="flex gap-2">
+                <input id="video-url" placeholder="https://youtube.com/watch?v=..."
+                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <button onclick="submitVideoDownload()"
+                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
+                    Download
+                </button>
+            </div>
+        </div>
+
+        <!-- Archive Article -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
+            <h3 class="text-lg font-semibold mb-3">📰 Archive Article</h3>
+            <p class="text-sm opacity-60 mb-3">Save a web article for permanent offline reading</p>
+            <div class="flex gap-2">
+                <input id="article-url" placeholder="https://example.com/interesting-article"
+                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <button onclick="submitArticle()"
+                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
+                    Archive
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Book -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
+            <h3 class="text-lg font-semibold mb-3">📖 Catalogue a Book</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <input id="book-title" placeholder="Book title *"
+                       class="col-span-2 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <input id="book-author" placeholder="Author"
+                       class="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <input id="book-year" placeholder="Year"
+                       class="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <textarea id="book-desc" placeholder="Description (optional)" rows="2"
+                          class="col-span-2 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+            </div>
+            <div class="flex justify-end mt-3">
+                <button onclick="submitBook()"
+                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium">
+                    Add Book
+                </button>
+            </div>
+        </div>
+
+        <!-- Import Playlist -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+            <h3 class="text-lg font-semibold mb-3">🎵 Import Playlist</h3>
+            <p class="text-sm opacity-60 mb-3">YouTube or Spotify playlist URL</p>
+            <div class="flex gap-2">
+                <input id="playlist-url" placeholder="https://open.spotify.com/playlist/..."
+                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <button onclick="submitPlaylist()"
+                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
+                    Import
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Media Detail Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black/90 z-[1000] overflow-y-auto" onclick="closeModal()">
         <div class="max-w-5xl mx-auto mt-6 mb-6 px-4" onclick="event.stopPropagation()">
@@ -119,6 +232,7 @@
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-2xl">
                 <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls></video>
+                <audio id="modal-audio" class="hidden w-full" controls></audio>
                 <div class="p-6">
                     <div id="modal-info" class="text-gray-900 dark:text-white"></div>
                     <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -227,6 +341,36 @@
         </div>
     </div>
 
+    <!-- Subscribe to Podcast Modal -->
+    <div id="subscribe-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeSubscribeModal()">
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg shadow-2xl"
+             onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-4">Subscribe to Podcast</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">RSS Feed URL *</label>
+                    <input id="podcast-feed-url" placeholder="https://example.com/feed.xml"
+                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Title (optional, auto-detected)</label>
+                    <input id="podcast-title" placeholder="Podcast Name"
+                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeSubscribeModal()"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    Cancel
+                </button>
+                <button onclick="submitPodcastSubscription()"
+                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
+                    Subscribe
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
     // ═══════════════════════════════════════════════════════════════
     // State
@@ -234,8 +378,10 @@
     let libraryData = [];
     let jobsData = [];
     let collectionsData = [];
+    let podcastsData = [];
     let currentTab = 'library';
     let currentMediaId = null;
+    let currentMediaItem = null;
 
     // ═══════════════════════════════════════════════════════════════
     // WebSocket (Socket.IO)
@@ -279,15 +425,17 @@
     // ═══════════════════════════════════════════════════════════════
     function showTab(tab) {
         currentTab = tab;
-        ['library', 'jobs', 'collections'].forEach(t => {
+        ['library', 'jobs', 'collections', 'podcasts', 'add'].forEach(t => {
             document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
-            document.getElementById(`btn-${t}`).classList.toggle('bg-white/20', t === tab);
-            if (t !== tab) document.getElementById(`btn-${t}`).classList.remove('bg-white/20');
+            const btn = document.getElementById(`btn-${t}`);
+            if (btn) btn.classList.toggle('bg-white/20', t === tab);
+            if (t !== tab && btn) btn.classList.remove('bg-white/20');
         });
         document.getElementById('search-container').classList.toggle('hidden', tab !== 'library');
 
         if (tab === 'jobs') loadJobs();
         if (tab === 'collections') loadCollections();
+        if (tab === 'podcasts') loadPodcasts();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -300,7 +448,7 @@
             libraryData = data.items;
             displayLibrary(libraryData);
             document.getElementById('library-count').textContent =
-                `${data.count} movie${data.count !== 1 ? 's' : ''} in your collection`;
+                `${data.count} item${data.count !== 1 ? 's' : ''} in your vault`;
         } catch (e) {
             document.getElementById('media-grid').innerHTML =
                 '<div class="text-center py-24 col-span-full opacity-50">Error loading library</div>';
@@ -314,30 +462,41 @@
                 <div class="text-center py-24 col-span-full fade-in">
                     <div class="text-6xl mb-4">📀</div>
                     <h2 class="text-xl opacity-50 mb-2">No media found</h2>
-                    <p class="text-gray-400 dark:text-gray-500">Insert a disc to start building your library</p>
+                    <p class="text-gray-400 dark:text-gray-500">Insert a disc, upload files, or add content to start building your vault</p>
                 </div>`;
             return;
         }
-        grid.innerHTML = items.map(item => `
+
+        const typeIcons = { video: '🎬', audio: '🎵', image: '🖼️', document: '📄', other: '📎' };
+        const typeColors = {
+            video: 'bg-blue-500', audio: 'bg-green-500', image: 'bg-pink-500',
+            document: 'bg-amber-500', other: 'bg-gray-500'
+        };
+
+        grid.innerHTML = items.map(item => {
+            const mt = item.media_type || 'video';
+            return `
             <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden cursor-pointer
                         transition-all duration-200 hover:-translate-y-1 hover:shadow-lg
                         hover:shadow-indigo-500/20 group fade-in"
                  onclick="showMedia('${item.id}')">
-                <div class="w-full h-[300px] bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-6xl overflow-hidden">
+                <div class="relative w-full h-[300px] bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-6xl overflow-hidden">
                     ${item.has_poster ?
                         `<img src="/api/poster/${item.id}" alt="${escHtml(item.title)}"
                               class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               loading="lazy">` :
-                        '🎬'}
+                        typeIcons[mt] || '📎'}
+                    <span class="absolute top-2 right-2 type-badge px-1.5 py-0.5 rounded text-white font-bold uppercase ${typeColors[mt] || 'bg-gray-500'}">${mt}</span>
                 </div>
                 <div class="p-4">
                     <div class="font-semibold mb-1 truncate">${escHtml(item.title)}</div>
                     <div class="text-sm text-gray-500 dark:text-gray-400">
-                        ${item.year || ''} ${item.size_formatted ? '&bull; ' + item.size_formatted : ''}
+                        ${item.year || ''} ${item.artist ? '• ' + escHtml(item.artist) : ''}
+                        ${item.size_formatted ? '• ' + item.size_formatted : ''}
                     </div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     function searchLibrary() {
@@ -370,18 +529,43 @@
             const item = await res.json();
             if (item.error) return;
             currentMediaId = id;
+            currentMediaItem = item;
 
             const video = document.getElementById('modal-video');
-            video.src = `/api/stream/${id}`;
+            const audio = document.getElementById('modal-audio');
+            const mt = item.media_type || 'video';
+
+            if (mt === 'audio') {
+                video.classList.add('hidden');
+                video.src = '';
+                audio.classList.remove('hidden');
+                audio.src = `/api/stream/${id}`;
+            } else if (mt === 'video') {
+                audio.classList.add('hidden');
+                audio.src = '';
+                video.classList.remove('hidden');
+                video.src = `/api/stream/${id}`;
+            } else {
+                // document / image / other — hide both players
+                video.classList.add('hidden');
+                video.src = '';
+                audio.classList.add('hidden');
+                audio.src = '';
+            }
 
             document.getElementById('modal-info').innerHTML = `
                 <h2 class="text-2xl font-bold mb-3">${escHtml(item.title)} ${item.year ? `<span class="font-normal opacity-60">(${item.year})</span>` : ''}</h2>
                 ${item.rating ? `<p class="text-yellow-500 mb-3">⭐ ${item.rating}/10</p>` : ''}
+                ${item.artist ? `<p class="mb-1"><span class="font-semibold opacity-60">Artist/Author:</span> ${escHtml(item.artist)}</p>` : ''}
                 ${item.director ? `<p class="mb-1"><span class="font-semibold opacity-60">Director:</span> ${escHtml(item.director)}</p>` : ''}
                 ${item.cast && item.cast.length ? `<p class="mb-1"><span class="font-semibold opacity-60">Cast:</span> ${item.cast.slice(0,5).map(escHtml).join(', ')}</p>` : ''}
                 ${item.genres && item.genres.length ? `<p class="mb-1"><span class="font-semibold opacity-60">Genres:</span> ${item.genres.map(escHtml).join(', ')}</p>` : ''}
+                ${item.source_url ? `<p class="mb-1"><span class="font-semibold opacity-60">Source:</span> <a href="${escHtml(item.source_url)}" target="_blank" class="text-indigo-400 hover:underline">${escHtml(item.source_url.substring(0,60))}${item.source_url.length > 60 ? '...' : ''}</a></p>` : ''}
                 ${item.overview ? `<p class="mt-4 opacity-80 leading-relaxed">${escHtml(item.overview)}</p>` : ''}
-                <p class="mt-4 text-sm opacity-40">${escHtml(item.filename || '')} &bull; ${item.size_formatted || ''}</p>
+                <p class="mt-4 text-sm opacity-40">
+                    <span class="uppercase font-semibold">${mt}</span> &bull;
+                    ${escHtml(item.filename || '')} &bull; ${item.size_formatted || ''}
+                </p>
             `;
 
             document.getElementById('modal').classList.remove('hidden');
@@ -392,10 +576,12 @@
 
     function closeModal() {
         const video = document.getElementById('modal-video');
-        video.pause();
-        video.src = '';
+        const audio = document.getElementById('modal-audio');
+        video.pause(); video.src = '';
+        audio.pause(); audio.src = '';
         document.getElementById('modal').classList.add('hidden');
         currentMediaId = null;
+        currentMediaItem = null;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -725,9 +911,301 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Upload / Drag-and-Drop
+    // ═══════════════════════════════════════════════════════════════
+    function initDropZone() {
+        const dz = document.getElementById('drop-zone');
+        if (!dz) return;
+
+        ['dragenter', 'dragover'].forEach(ev =>
+            dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+        ['dragleave', 'drop'].forEach(ev =>
+            dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+
+        dz.addEventListener('drop', e => {
+            const files = e.dataTransfer.files;
+            if (files.length) uploadFiles(files);
+        });
+    }
+
+    function handleFileSelect(e) {
+        if (e.target.files.length) uploadFiles(e.target.files);
+    }
+
+    async function uploadFiles(files) {
+        const form = new FormData();
+        for (const f of files) form.append('files', f);
+
+        const prog = document.getElementById('upload-progress');
+        const bar = document.getElementById('upload-bar');
+        const status = document.getElementById('upload-status');
+        prog.classList.remove('hidden');
+        bar.style.width = '0%';
+        status.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`;
+
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload');
+            xhr.upload.onprogress = e => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    bar.style.width = pct + '%';
+                    status.textContent = `Uploading... ${pct}%`;
+                }
+            };
+            xhr.onload = () => {
+                if (xhr.status === 201) {
+                    const data = JSON.parse(xhr.responseText);
+                    status.textContent = `✅ ${data.uploaded.length} file${data.uploaded.length > 1 ? 's' : ''} uploaded`;
+                    bar.style.width = '100%';
+                    loadLibrary();
+                } else {
+                    status.textContent = '❌ Upload failed';
+                }
+                setTimeout(() => prog.classList.add('hidden'), 3000);
+            };
+            xhr.onerror = () => {
+                status.textContent = '❌ Upload failed';
+                setTimeout(() => prog.classList.add('hidden'), 3000);
+            };
+            xhr.send(form);
+        } catch (e) {
+            status.textContent = '❌ Upload failed';
+            setTimeout(() => prog.classList.add('hidden'), 3000);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Content Submission
+    // ═══════════════════════════════════════════════════════════════
+    async function submitVideoDownload() {
+        const url = document.getElementById('video-url').value.trim();
+        if (!url) return alert('Please enter a URL');
+        try {
+            const res = await fetch('/api/downloads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('video-url').value = '';
+                alert('Download queued! Check Jobs tab for progress.');
+                showTab('jobs');
+            } else {
+                alert(data.error || 'Failed');
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function submitArticle() {
+        const url = document.getElementById('article-url').value.trim();
+        if (!url) return alert('Please enter a URL');
+        try {
+            const res = await fetch('/api/articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('article-url').value = '';
+                alert('Article archiving queued!');
+                showTab('jobs');
+            } else {
+                alert(data.error || 'Failed');
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function submitBook() {
+        const title = document.getElementById('book-title').value.trim();
+        if (!title) return alert('Book title is required');
+        const body = {
+            title,
+            author: document.getElementById('book-author').value.trim() || undefined,
+            year: document.getElementById('book-year').value.trim() || undefined,
+            description: document.getElementById('book-desc').value.trim() || undefined,
+        };
+        try {
+            const res = await fetch('/api/books', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (res.ok) {
+                ['book-title', 'book-author', 'book-year', 'book-desc'].forEach(
+                    id => document.getElementById(id).value = '');
+                alert('Book added to library!');
+                loadLibrary();
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function submitPlaylist() {
+        const url = document.getElementById('playlist-url').value.trim();
+        if (!url) return alert('Please enter a playlist URL');
+        const name = prompt('Name for this playlist:', 'Imported Playlist');
+        if (!name) return;
+        try {
+            const res = await fetch('/api/import/playlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, name })
+            });
+            if (res.ok) {
+                document.getElementById('playlist-url').value = '';
+                alert('Playlist import queued!');
+                showTab('jobs');
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Podcasts
+    // ═══════════════════════════════════════════════════════════════
+    async function loadPodcasts() {
+        try {
+            const res = await fetch('/api/podcasts');
+            const data = await res.json();
+            podcastsData = data.podcasts;
+            displayPodcasts(podcastsData);
+        } catch (e) {
+            console.error('Error loading podcasts:', e);
+        }
+    }
+
+    function displayPodcasts(pods) {
+        const container = document.getElementById('podcasts-list');
+        if (pods.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-12 opacity-50 fade-in">
+                    <div class="text-5xl mb-4">🎙️</div>
+                    <p>No podcasts yet. Click "+ Subscribe" to add one.</p>
+                </div>`;
+            return;
+        }
+        container.innerHTML = pods.map(pod => `
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 mb-4 flex gap-5 items-start shadow-sm fade-in">
+                <div class="w-20 h-20 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-3xl flex-shrink-0 overflow-hidden">
+                    ${pod.artwork_path ?
+                        `<img src="/api/poster/${pod.id}" class="w-full h-full object-cover" onerror="this.outerHTML='🎙️'">` :
+                        '🎙️'}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="font-semibold text-lg truncate">${escHtml(pod.title || pod.feed_url)}</h3>
+                    <p class="text-sm opacity-60 truncate">${escHtml(pod.author || '')}</p>
+                    <p class="text-sm opacity-40 mt-1 line-clamp-2">${escHtml(pod.description || '').substring(0, 150)}</p>
+                    <div class="flex gap-3 mt-3">
+                        <button onclick="viewEpisodes('${pod.id}')"
+                            class="text-sm text-indigo-500 hover:text-indigo-400 font-medium">
+                            View Episodes
+                        </button>
+                        <button onclick="unsubscribePodcast('${pod.id}')"
+                            class="text-sm text-red-500 hover:text-red-400 font-medium">
+                            Unsubscribe
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function viewEpisodes(podId) {
+        try {
+            const res = await fetch(`/api/podcasts/${podId}/episodes`);
+            const data = await res.json();
+            const pod = podcastsData.find(p => p.id === podId);
+            const container = document.getElementById('podcasts-list');
+
+            container.innerHTML = `
+                <div class="mb-4">
+                    <button onclick="loadPodcasts()" class="text-indigo-500 hover:text-indigo-400 text-sm font-medium">&larr; Back to Podcasts</button>
+                </div>
+                <h3 class="text-xl font-bold mb-4">${escHtml(pod?.title || 'Episodes')}</h3>
+                ${data.episodes.length === 0 ?
+                    '<p class="opacity-50 py-8 text-center">No episodes found.</p>' :
+                    data.episodes.map(ep => `
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 mb-2 shadow-sm">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-medium truncate">${escHtml(ep.title)}</div>
+                                    <div class="text-sm opacity-50 mt-1">
+                                        ${ep.published_at ? new Date(ep.published_at).toLocaleDateString() : ''}
+                                        ${ep.duration_seconds ? ' • ' + formatDuration(ep.duration_seconds) : ''}
+                                        ${ep.is_downloaded ? ' • ✅ Downloaded' : ''}
+                                    </div>
+                                </div>
+                                ${ep.is_downloaded && ep.file_path ?
+                                    `<button onclick="playEpisodeAudio('${ep.id}', '${escAttr(ep.title)}')" class="text-indigo-500 hover:text-indigo-400 text-sm font-medium ml-2 whitespace-nowrap">▶ Play</button>` :
+                                    ''}
+                            </div>
+                        </div>
+                    `).join('')}
+            `;
+        } catch (e) {
+            console.error('Error loading episodes:', e);
+        }
+    }
+
+    function formatDuration(seconds) {
+        if (!seconds) return '';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m ${s}s`;
+    }
+
+    function playEpisodeAudio(epId, title) {
+        // Simple inline player
+        alert('Audio playback coming in next update!');
+    }
+
+    async function unsubscribePodcast(podId) {
+        if (!confirm('Unsubscribe from this podcast?')) return;
+        await fetch(`/api/podcasts/${podId}`, { method: 'DELETE' });
+        loadPodcasts();
+    }
+
+    function showSubscribeModal() {
+        document.getElementById('podcast-feed-url').value = '';
+        document.getElementById('podcast-title').value = '';
+        document.getElementById('subscribe-modal').classList.remove('hidden');
+    }
+
+    function closeSubscribeModal() {
+        document.getElementById('subscribe-modal').classList.add('hidden');
+    }
+
+    async function submitPodcastSubscription() {
+        const feedUrl = document.getElementById('podcast-feed-url').value.trim();
+        if (!feedUrl) return alert('Feed URL is required');
+        const title = document.getElementById('podcast-title').value.trim();
+
+        try {
+            const res = await fetch('/api/podcasts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ feed_url: feedUrl, title: title || undefined })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                closeSubscribeModal();
+                loadPodcasts();
+            } else {
+                alert(data.error || 'Failed to subscribe');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Init
     // ═══════════════════════════════════════════════════════════════
     initDarkMode();
+    initDropZone();
     loadLibrary();
     </script>
 </body>

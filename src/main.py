@@ -13,10 +13,12 @@ from datetime import datetime
 from pathlib import Path
 
 from .app_state import AppState
+from .content_downloader import ContentDownloader
 from .disc_monitor import DiscMonitor
 from .metadata import MetadataExtractor
 from .ripper import Ripper
-from .utils import load_config, setup_logger, configure_notifications
+from .utils import load_config, setup_logger, configure_notifications, \
+    rename_with_metadata, reorganize_audio_album
 from .web_server import MediaServer
 
 
@@ -28,6 +30,7 @@ def job_worker(app_state: AppState, ripper: Ripper,
     Picks up queued jobs one at a time, runs the ripper, then extracts metadata.
     """
     logger.info("Job worker thread started")
+    rename_ok = config.get('file_naming', {}).get('rename_after_rip', True)
 
     while True:
         try:
@@ -39,7 +42,8 @@ def job_worker(app_state: AppState, ripper: Ripper,
             job_id = job['id']
             disc_type = job.get('disc_type', 'dvd')
             disc_hints = json.loads(job.get('disc_hints', '{}'))
-            logger.info(f"Processing job {job_id}: {job['title']} ({disc_type})")
+            job_type = job.get('job_type', 'rip')
+            logger.info(f"Processing job {job_id}: {job['title']} ({disc_type}/{job_type})")
 
             # Mark as encoding
             app_state.update_job_status(
@@ -72,6 +76,7 @@ def job_worker(app_state: AppState, ripper: Ripper,
                 logger.info(f"Job {job_id} completed: {output}")
 
                 # Extract and save metadata
+                metadata = None
                 if config['metadata'].get('save_to_json', True):
                     try:
                         logger.info(f"Extracting metadata for job {job_id}")
@@ -86,6 +91,30 @@ def job_worker(app_state: AppState, ripper: Ripper,
                     except Exception as e:
                         logger.error(f"Metadata extraction failed for job {job_id}: {e}")
 
+                # ── Rename output file with metadata ──
+                if rename_ok and metadata:
+                    try:
+                        if disc_type == 'audio_cd':
+                            base_output = config['output'].get(
+                                'base_directory', '/Users/poppemacmini/Media')
+                            new_dir = reorganize_audio_album(
+                                output, metadata, base_output, logger)
+                            if new_dir:
+                                app_state.update_job_status(
+                                    job_id, 'completed', output_path=new_dir)
+                        else:
+                            new_path = rename_with_metadata(
+                                output, metadata, logger)
+                            if new_path and new_path != output:
+                                app_state.update_job_status(
+                                    job_id, 'completed', output_path=new_path)
+                                # Re-save metadata JSON under new stem
+                                new_stem = Path(new_path).stem
+                                metadata_extractor.save_metadata(
+                                    metadata, new_stem)
+                    except Exception as e:
+                        logger.error(f"Rename failed for job {job_id}: {e}")
+
                 # Notify clients to refresh library
                 app_state.broadcast('library_updated', {})
             else:
@@ -98,7 +127,6 @@ def job_worker(app_state: AppState, ripper: Ripper,
 
         except Exception as e:
             logger.error(f"Job worker error: {e}")
-            # If we have a current job, mark it failed
             try:
                 active = app_state.get_active_job()
                 if active:
@@ -110,6 +138,76 @@ def job_worker(app_state: AppState, ripper: Ripper,
             except Exception:
                 pass
             time.sleep(5)
+
+
+def content_worker(app_state: AppState, content_downloader: ContentDownloader,
+                   config: dict, logger):
+    """
+    Background thread that processes content download jobs (non-rip jobs).
+    Handles: download, article, podcast, playlist_import job types.
+    """
+    logger.info("Content worker thread started")
+
+    while True:
+        try:
+            # Look for content jobs specifically
+            conn = app_state._get_conn()
+            row = conn.execute(
+                "SELECT * FROM jobs WHERE status = 'queued' "
+                "AND job_type != 'rip' ORDER BY created_at ASC LIMIT 1"
+            ).fetchone()
+            if not row:
+                time.sleep(3)
+                continue
+
+            job = dict(row)
+            job_id = job['id']
+            logger.info(f"Content job {job_id}: {job['title']} ({job.get('job_type')})")
+
+            app_state.update_job_status(
+                job_id, 'encoding',
+                started_at=datetime.now().isoformat()
+            )
+
+            output = content_downloader.process_content_job(job)
+
+            if output:
+                app_state.update_job_status(
+                    job_id, 'completed',
+                    output_path=output,
+                    completed_at=datetime.now().isoformat(),
+                    progress=100.0
+                )
+                logger.info(f"Content job {job_id} completed: {output}")
+                app_state.broadcast('library_updated', {})
+            else:
+                app_state.update_job_status(
+                    job_id, 'failed',
+                    error_message='Content processing returned no output',
+                    completed_at=datetime.now().isoformat()
+                )
+                logger.error(f"Content job {job_id} failed")
+
+        except Exception as e:
+            logger.error(f"Content worker error: {e}")
+            time.sleep(5)
+
+
+def podcast_checker(app_state: AppState, content_downloader: ContentDownloader,
+                    config: dict, logger):
+    """
+    Background thread that periodically checks podcast feeds for new episodes.
+    """
+    check_interval = config.get('podcasts', {}).get('check_interval_hours', 6)
+    interval_seconds = check_interval * 3600
+    logger.info(f"Podcast checker started (interval: {check_interval}h)")
+
+    while True:
+        try:
+            content_downloader.check_podcast_feeds()
+        except Exception as e:
+            logger.error(f"Podcast checker error: {e}")
+        time.sleep(interval_seconds)
 
 
 def main():
@@ -148,8 +246,9 @@ def main():
     # Initialize components with shared state
     ripper = Ripper(config_path=args.config, app_state=app_state)
     metadata_extractor = MetadataExtractor(config_path=args.config)
+    content_dl = ContentDownloader(config_path=args.config, app_state=app_state)
 
-    # Start job worker thread
+    # Start job worker thread (disc ripping)
     if not args.no_worker:
         worker_thread = threading.Thread(
             target=job_worker,
@@ -159,8 +258,29 @@ def main():
         )
         worker_thread.start()
         logger.info("Job worker thread started")
+
+        # Start content worker thread (downloads, articles, playlists)
+        content_thread = threading.Thread(
+            target=content_worker,
+            args=(app_state, content_dl, config, logger),
+            daemon=True,
+            name='content-worker'
+        )
+        content_thread.start()
+        logger.info("Content worker thread started")
     else:
         logger.info("Job worker disabled")
+
+    # Start podcast checker thread
+    if config.get('podcasts', {}).get('enabled', True):
+        pod_thread = threading.Thread(
+            target=podcast_checker,
+            args=(app_state, content_dl, config, logger),
+            daemon=True,
+            name='podcast-checker'
+        )
+        pod_thread.start()
+        logger.info("Podcast checker thread started")
 
     # Start disc monitor thread
     if not args.no_monitor and config['automation'].get('auto_detect_disc', True):
