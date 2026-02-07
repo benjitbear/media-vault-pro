@@ -4,9 +4,19 @@ Utility functions for the media ripper application
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any
 from logging.handlers import RotatingFileHandler
+
+# Module-level flag for notification suppression
+_notifications_enabled = True
+
+
+def configure_notifications(enabled: bool):
+    """Enable or disable desktop notifications globally"""
+    global _notifications_enabled
+    _notifications_enabled = enabled
 
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
@@ -26,18 +36,22 @@ def load_config(config_path: str = "config.json") -> Dict[str, Any]:
         return json.load(f)
 
 
-def setup_logger(name: str, log_file: str, level=logging.INFO) -> logging.Logger:
+def setup_logger(name: str, log_file: str, level=None, debug: bool = False) -> logging.Logger:
     """
     Setup a logger with file and console output
     
     Args:
         name: Logger name
         log_file: Log file path
-        level: Logging level
+        level: Logging level (overrides debug flag if provided)
+        debug: If True, set level to DEBUG
         
     Returns:
         Configured logger
     """
+    if level is None:
+        level = logging.DEBUG if debug else logging.INFO
+
     base_dir = Path(__file__).parent.parent
     log_path = base_dir / "logs" / log_file
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +61,9 @@ def setup_logger(name: str, log_file: str, level=logging.INFO) -> logging.Logger
     
     # Prevent duplicate handlers
     if logger.handlers:
+        # Update existing handler levels if debug mode changed
+        for handler in logger.handlers:
+            handler.setLevel(level)
         return logger
     
     # File handler with rotation
@@ -61,11 +78,13 @@ def setup_logger(name: str, log_file: str, level=logging.INFO) -> logging.Logger
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
     
-    # Formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # Formatter — include function name in debug mode
+    if debug:
+        fmt = '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    else:
+        fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+    formatter = logging.Formatter(fmt, datefmt='%Y-%m-%d %H:%M:%S')
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
     
@@ -146,15 +165,48 @@ def ensure_directory(path: str) -> Path:
 
 def send_notification(title: str, message: str):
     """
-    Send macOS notification
+    Send macOS notification (respects notification_enabled config)
     
     Args:
         title: Notification title
         message: Notification message
     """
+    if not _notifications_enabled:
+        return
     try:
         os.system(f"""
             osascript -e 'display notification "{message}" with title "{title}"'
         """)
     except Exception:
         pass  # Silently fail if notifications don't work
+
+
+def print_progress(percent: float, eta: str = None, fps: float = None,
+                   title: str = '', width: int = 40):
+    """
+    Print a progress bar to the terminal (overwrites current line).
+    
+    Args:
+        percent: Progress 0-100
+        eta: Estimated time remaining
+        fps: Frames per second
+        title: Current title being processed
+        width: Width of the progress bar in characters
+    """
+    filled = int(width * percent / 100)
+    bar = '█' * filled + '░' * (width - filled)
+    parts = [f'\r  [{bar}] {percent:5.1f}%']
+    if fps:
+        parts.append(f' {fps:.1f} fps')
+    if eta:
+        parts.append(f' ETA {eta}')
+    if title:
+        # Truncate long titles
+        short = title[:25] + '…' if len(title) > 25 else title
+        parts.append(f' | {short}')
+    line = ''.join(parts)
+    sys.stdout.write(line.ljust(100))
+    sys.stdout.flush()
+    if percent >= 100:
+        sys.stdout.write('\n')
+

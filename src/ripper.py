@@ -2,28 +2,42 @@
 Main DVD/CD ripping functionality using HandBrake
 """
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 
-from .utils import load_config, setup_logger, sanitize_filename, format_time, send_notification
+from .utils import (load_config, setup_logger, sanitize_filename, format_time,
+                    send_notification, configure_notifications, print_progress)
+
+if TYPE_CHECKING:
+    from .app_state import AppState
 
 
 class Ripper:
     """Handles DVD/CD ripping operations"""
     
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.json", app_state: 'AppState' = None):
         """
         Initialize the Ripper
         
         Args:
             config_path: Path to configuration file
+            app_state: Optional shared AppState for progress reporting
         """
         self.config = load_config(config_path)
-        self.logger = setup_logger('ripper', 'ripper.log')
+        debug_mode = self.config.get('logging', {}).get('debug', False)
+        self.logger = setup_logger('ripper', 'ripper.log', debug=debug_mode)
         self.output_dir = Path(self.config['output']['base_directory'])
+        self.app_state = app_state
+        self.show_progress = self.config.get('logging', {}).get('progress_indicator', True)
+
+        # Honour notification config
+        notify_enabled = self.config.get('automation', {}).get('notification_enabled', True)
+        configure_notifications(notify_enabled)
+
         self.logger.info("Ripper initialized")
     
     def check_handbrake_installed(self) -> bool:
@@ -130,7 +144,7 @@ class Ripper:
         return cmd
     
     def rip_disc(self, source_path: str, title_name: Optional[str] = None, 
-                 title_number: int = 1) -> Optional[str]:
+                 title_number: int = 1, job_id: Optional[str] = None) -> Optional[str]:
         """
         Rip a DVD/CD to the output directory
         
@@ -138,6 +152,7 @@ class Ripper:
             source_path: Path to mounted disc
             title_name: Custom name for the output file
             title_number: Title number to rip (1 for main feature)
+            job_id: Optional job ID for progress reporting via AppState
             
         Returns:
             Path to output file if successful, None otherwise
@@ -194,9 +209,27 @@ class Ripper:
             for line in process.stdout:
                 line = line.strip()
                 if line:
-                    # Log progress lines
+                    # Parse and report progress
                     if 'Encoding:' in line or 'ETA' in line:
-                        print(line)  # Show progress in console
+                        # Parse HandBrake progress: "Encoding: task 1 of 1, 45.23 %"
+                        pct_match = re.search(r'(\d+\.\d+)\s*%', line)
+                        eta_match = re.search(r'ETA\s+(\S+)', line)
+                        fps_match = re.search(r'(\d+\.\d+)\s*fps', line)
+                        pct = float(pct_match.group(1)) if pct_match else 0.0
+                        eta = eta_match.group(1) if eta_match else None
+                        fps = float(fps_match.group(1)) if fps_match else None
+
+                        # Console progress bar
+                        if self.show_progress:
+                            print_progress(pct, eta=eta, fps=fps, title=title_name or '')
+
+                        # WebSocket progress updates
+                        if job_id and self.app_state:
+                            if pct_match:
+                                self.app_state.update_job_progress(
+                                    job_id, pct, eta=eta,
+                                    fps=fps, title=title_name
+                                )
                     self.logger.debug(line)
             
             process.wait()

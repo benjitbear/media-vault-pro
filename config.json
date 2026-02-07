@@ -1,6 +1,6 @@
 {
   "output": {
-    "base_directory": "/Users/poppemacmini/Documents/MediaLibrary",
+    "base_directory": "/Users/poppemacmini/Media",
     "format": "mp4",
     "video_encoder": "x264",
     "quality": 22,
@@ -17,7 +17,7 @@
   "automation": {
     "auto_detect_disc": true,
     "auto_eject_after_rip": true,
-    "notification_enabled": true
+    "notification_enabled": false
   },
   "web_server": {
     "enabled": true,
@@ -32,5 +32,26 @@
   "handbrake": {
     "preset": "Fast 1080p30",
     "additional_options": []
+  },
+  "auth": {
+    "enabled": true,
+    "session_hours": 24,
+    "default_users": [
+      {"username": "admin", "password": "Intmain(9)", "role": "admin"},
+      {"username": "ben", "password": "Intmain(9)", "role": "user"}
+    ]
+  },
+  "library_cache": {
+    "ttl_seconds": 300
+  },
+  "logging": {
+    "debug": false,
+    "progress_indicator": false
+  },
+  "jellyfin": {
+    "enabled": false,
+    "library_path": "",
+    "api_url": "",
+    "api_key": ""
   }
 }

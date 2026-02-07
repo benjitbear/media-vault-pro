@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "media-ripper"
-version = "0.1.0"
-description = "Automated DVD/CD ripping and digital library system"
+name = "media-library"
+version = "0.2.0"
+description = "Automated digital media library system with web interface"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -24,13 +24,10 @@ classifiers = [
 ]
 dependencies = [
     "flask>=3.0.0",
+    "flask-socketio>=5.3.0",
+    "simple-websocket>=0.10.0",
     "requests>=2.31.0",
-    "pymediainfo>=6.1.0",
     "Pillow>=10.2.0",
-    "watchdog>=4.0.0",
-    "tmdbsimple>=2.9.1",
-    "beautifulsoup4>=4.12.3",
-    "lxml>=5.1.0",
     "python-dotenv>=1.0.0",
 ]
 
@@ -49,6 +46,7 @@ dev = [
 media-ripper = "src.ripper:main"
 disc-monitor = "src.disc_monitor:main"
 media-server = "src.web_server:main"
+media-server-full = "src.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

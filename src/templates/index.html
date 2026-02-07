@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ library_name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-bar { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .status-pulse { animation: pulse-bar 2s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
+
+    <!-- Status Bar (active rip) -->
+    <div id="status-bar" class="hidden fixed top-0 left-0 right-0 bg-indigo-600 text-white px-4 py-2 z-50 status-pulse">
+        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm">
+            <span>🔄 <span id="status-title">Encoding...</span></span>
+            <div class="flex items-center gap-3">
+                <span id="status-eta" class="opacity-80"></span>
+                <div class="w-32 bg-indigo-800 rounded-full h-2">
+                    <div id="status-progress-bar" class="bg-white rounded-full h-2 transition-all duration-300" style="width:0%"></div>
+                </div>
+                <span id="status-percent" class="font-mono w-14 text-right">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reconnection indicator -->
+    <div id="ws-status" class="hidden fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-1 text-xs z-[60]">
+        ⚠️ Reconnecting to server...
+    </div>
+
+    <!-- Header -->
+    <div class="p-5 pb-0">
+        <div class="text-center py-10 px-5 bg-gradient-to-br from-indigo-500 to-purple-700 rounded-xl mb-8 text-white">
+            <h1 class="text-4xl font-bold mb-2">🎬 {{ library_name }}</h1>
+            <p id="library-count" class="opacity-90">Loading library...</p>
+            <div class="flex flex-wrap justify-center gap-2 mt-6">
+                <button id="btn-library" onclick="showTab('library')"
+                    class="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition text-sm font-medium">
+                    📚 Library
+                </button>
+                <button id="btn-jobs" onclick="showTab('jobs')"
+                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
+                    ⚙️ Jobs
+                </button>
+                <button id="btn-collections" onclick="showTab('collections')"
+                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
+                    📁 Collections
+                </button>
+                <button onclick="toggleDarkMode()"
+                    class="px-3 py-2 rounded-lg hover:bg-white/30 transition text-sm" title="Toggle dark mode">
+                    <span id="dark-mode-icon">☀️</span>
+                </button>
+                {% if auth_enabled %}
+                <a href="/logout"
+                    class="px-3 py-2 rounded-lg hover:bg-white/30 transition text-sm" title="Logout">🔓</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div id="search-container" class="max-w-xl mx-auto mb-8 px-5">
+        <input type="text" id="search" placeholder="🔍 Search movies, directors, actors, genres..."
+               onkeyup="searchLibrary()"
+               class="w-full py-4 px-5 border-none rounded-full bg-white dark:bg-gray-800
+                      text-gray-900 dark:text-white placeholder-gray-400
+                      focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+    </div>
+
+    <!-- Library Tab -->
+    <div id="tab-library" class="max-w-7xl mx-auto px-5 pb-12">
+        <div id="media-grid" class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5">
+            <div class="text-center py-24 col-span-full opacity-50">Loading your library...</div>
+        </div>
+    </div>
+
+    <!-- Jobs Tab -->
+    <div id="tab-jobs" class="hidden max-w-5xl mx-auto px-5 pb-12">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Rip Jobs</h2>
+            <div class="flex gap-2">
+                <button onclick="rescanLibrary()"
+                    class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition text-sm">
+                    🔄 Rescan Library
+                </button>
+                <button onclick="showRipForm()"
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium">
+                    + Rip a Disc
+                </button>
+            </div>
+        </div>
+        <div id="jobs-list" class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm">
+            <p class="text-center py-12 opacity-50">Loading jobs...</p>
+        </div>
+    </div>
+
+    <!-- Collections Tab -->
+    <div id="tab-collections" class="hidden max-w-7xl mx-auto px-5 pb-12">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Collections</h2>
+        </div>
+        <div id="collections-list">
+            <p class="text-center py-12 opacity-50">Loading collections...</p>
+        </div>
+    </div>
+
+    <!-- Media Detail Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/90 z-[1000] overflow-y-auto" onclick="closeModal()">
+        <div class="max-w-5xl mx-auto mt-6 mb-6 px-4" onclick="event.stopPropagation()">
+            <div class="flex justify-end mb-2">
+                <button onclick="closeModal()" class="text-white text-3xl hover:opacity-70 leading-none">&times;</button>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-2xl">
+                <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls></video>
+                <div class="p-6">
+                    <div id="modal-info" class="text-gray-900 dark:text-white"></div>
+                    <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <button onclick="downloadMedia()"
+                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
+                            ⬇️ Download
+                        </button>
+                        <button onclick="openEditModal()"
+                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
+                            ✏️ Edit Metadata
+                        </button>
+                        <button onclick="addToCollection()"
+                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
+                            📁 Add to Collection
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Metadata Modal -->
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeEditModal()">
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+             onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-4">Edit Metadata</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Title</label>
+                    <input id="edit-title" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 opacity-70">Year</label>
+                        <input id="edit-year" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 opacity-70">Rating (0-10)</label>
+                        <input id="edit-rating" type="number" step="0.1" min="0" max="10"
+                               class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Director</label>
+                    <input id="edit-director" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Genres (comma-separated)</label>
+                    <input id="edit-genres" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Cast (comma-separated)</label>
+                    <input id="edit-cast" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Overview</label>
+                    <textarea id="edit-overview" rows="4"
+                              class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeEditModal()"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    Cancel
+                </button>
+                <button onclick="saveMetadata()"
+                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rip Disc Modal -->
+    <div id="rip-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeRipModal()">
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg shadow-2xl"
+             onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-4">Rip a Disc</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Source Path *</label>
+                    <input id="rip-source" placeholder="/Volumes/MY_DVD"
+                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Title (optional, auto-detected from disc)</label>
+                    <input id="rip-title" placeholder="Movie Name"
+                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 opacity-70">Title Number</label>
+                    <input id="rip-title-num" type="number" value="1" min="1"
+                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeRipModal()"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    Cancel
+                </button>
+                <button onclick="submitRipJob()"
+                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
+                    Start Ripping
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // State
+    // ═══════════════════════════════════════════════════════════════
+    let libraryData = [];
+    let jobsData = [];
+    let collectionsData = [];
+    let currentTab = 'library';
+    let currentMediaId = null;
+
+    // ═══════════════════════════════════════════════════════════════
+    // WebSocket (Socket.IO)
+    // ═══════════════════════════════════════════════════════════════
+    const socket = io();
+
+    socket.on('connect', () => {
+        console.log('WebSocket connected');
+        const el = document.getElementById('ws-status');
+        if (el) el.classList.add('hidden');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('WebSocket disconnected');
+        const el = document.getElementById('ws-status');
+        if (el) el.classList.remove('hidden');
+    });
+
+    socket.on('rip_progress', (data) => {
+        updateStatusBar(data);
+        updateJobProgress(data);
+    });
+
+    socket.on('job_update', (data) => {
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+            hideStatusBar();
+        }
+        if (currentTab === 'jobs') loadJobs();
+    });
+
+    socket.on('job_created', (data) => {
+        if (currentTab === 'jobs') loadJobs();
+    });
+
+    socket.on('library_updated', () => {
+        loadLibrary();
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // Tab Navigation
+    // ═══════════════════════════════════════════════════════════════
+    function showTab(tab) {
+        currentTab = tab;
+        ['library', 'jobs', 'collections'].forEach(t => {
+            document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+            document.getElementById(`btn-${t}`).classList.toggle('bg-white/20', t === tab);
+            if (t !== tab) document.getElementById(`btn-${t}`).classList.remove('bg-white/20');
+        });
+        document.getElementById('search-container').classList.toggle('hidden', tab !== 'library');
+
+        if (tab === 'jobs') loadJobs();
+        if (tab === 'collections') loadCollections();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Library
+    // ═══════════════════════════════════════════════════════════════
+    async function loadLibrary() {
+        try {
+            const res = await fetch('/api/library');
+            const data = await res.json();
+            libraryData = data.items;
+            displayLibrary(libraryData);
+            document.getElementById('library-count').textContent =
+                `${data.count} movie${data.count !== 1 ? 's' : ''} in your collection`;
+        } catch (e) {
+            document.getElementById('media-grid').innerHTML =
+                '<div class="text-center py-24 col-span-full opacity-50">Error loading library</div>';
+        }
+    }
+
+    function displayLibrary(items) {
+        const grid = document.getElementById('media-grid');
+        if (items.length === 0) {
+            grid.innerHTML = `
+                <div class="text-center py-24 col-span-full fade-in">
+                    <div class="text-6xl mb-4">📀</div>
+                    <h2 class="text-xl opacity-50 mb-2">No media found</h2>
+                    <p class="text-gray-400 dark:text-gray-500">Insert a disc to start building your library</p>
+                </div>`;
+            return;
+        }
+        grid.innerHTML = items.map(item => `
+            <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden cursor-pointer
+                        transition-all duration-200 hover:-translate-y-1 hover:shadow-lg
+                        hover:shadow-indigo-500/20 group fade-in"
+                 onclick="showMedia('${item.id}')">
+                <div class="w-full h-[300px] bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-6xl overflow-hidden">
+                    ${item.has_poster ?
+                        `<img src="/api/poster/${item.id}" alt="${escHtml(item.title)}"
+                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy">` :
+                        '🎬'}
+                </div>
+                <div class="p-4">
+                    <div class="font-semibold mb-1 truncate">${escHtml(item.title)}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        ${item.year || ''} ${item.size_formatted ? '&bull; ' + item.size_formatted : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function searchLibrary() {
+        const q = document.getElementById('search').value.toLowerCase();
+        if (!q) { displayLibrary(libraryData); return; }
+        const filtered = libraryData.filter(item =>
+            item.title.toLowerCase().includes(q) ||
+            (item.director && item.director.toLowerCase().includes(q)) ||
+            (item.cast && item.cast.some(a => a.toLowerCase().includes(q))) ||
+            (item.genres && item.genres.some(g => g.toLowerCase().includes(q)))
+        );
+        displayLibrary(filtered);
+    }
+
+    async function rescanLibrary() {
+        try {
+            await fetch('/api/scan', { method: 'POST' });
+            loadLibrary();
+        } catch (e) {
+            console.error('Rescan failed:', e);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Media Detail Modal
+    // ═══════════════════════════════════════════════════════════════
+    async function showMedia(id) {
+        try {
+            const res = await fetch(`/api/media/${id}`);
+            const item = await res.json();
+            if (item.error) return;
+            currentMediaId = id;
+
+            const video = document.getElementById('modal-video');
+            video.src = `/api/stream/${id}`;
+
+            document.getElementById('modal-info').innerHTML = `
+                <h2 class="text-2xl font-bold mb-3">${escHtml(item.title)} ${item.year ? `<span class="font-normal opacity-60">(${item.year})</span>` : ''}</h2>
+                ${item.rating ? `<p class="text-yellow-500 mb-3">⭐ ${item.rating}/10</p>` : ''}
+                ${item.director ? `<p class="mb-1"><span class="font-semibold opacity-60">Director:</span> ${escHtml(item.director)}</p>` : ''}
+                ${item.cast && item.cast.length ? `<p class="mb-1"><span class="font-semibold opacity-60">Cast:</span> ${item.cast.slice(0,5).map(escHtml).join(', ')}</p>` : ''}
+                ${item.genres && item.genres.length ? `<p class="mb-1"><span class="font-semibold opacity-60">Genres:</span> ${item.genres.map(escHtml).join(', ')}</p>` : ''}
+                ${item.overview ? `<p class="mt-4 opacity-80 leading-relaxed">${escHtml(item.overview)}</p>` : ''}
+                <p class="mt-4 text-sm opacity-40">${escHtml(item.filename || '')} &bull; ${item.size_formatted || ''}</p>
+            `;
+
+            document.getElementById('modal').classList.remove('hidden');
+        } catch (e) {
+            console.error('Error loading media:', e);
+        }
+    }
+
+    function closeModal() {
+        const video = document.getElementById('modal-video');
+        video.pause();
+        video.src = '';
+        document.getElementById('modal').classList.add('hidden');
+        currentMediaId = null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Edit Metadata
+    // ═══════════════════════════════════════════════════════════════
+    async function openEditModal() {
+        if (!currentMediaId) return;
+        const res = await fetch(`/api/media/${currentMediaId}`);
+        const item = await res.json();
+
+        document.getElementById('edit-title').value = item.title || '';
+        document.getElementById('edit-year').value = item.year || '';
+        document.getElementById('edit-director').value = item.director || '';
+        document.getElementById('edit-rating').value = item.rating || '';
+        document.getElementById('edit-genres').value = (item.genres || []).join(', ');
+        document.getElementById('edit-cast').value = (item.cast || []).join(', ');
+        document.getElementById('edit-overview').value = item.overview || '';
+
+        document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    async function saveMetadata() {
+        if (!currentMediaId) return;
+        const data = {
+            title: document.getElementById('edit-title').value,
+            year: document.getElementById('edit-year').value,
+            director: document.getElementById('edit-director').value,
+            rating: parseFloat(document.getElementById('edit-rating').value) || null,
+            genres: document.getElementById('edit-genres').value.split(',').map(s => s.trim()).filter(Boolean),
+            cast_members: document.getElementById('edit-cast').value.split(',').map(s => s.trim()).filter(Boolean),
+            overview: document.getElementById('edit-overview').value
+        };
+
+        await fetch(`/api/media/${currentMediaId}/metadata`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        closeEditModal();
+        loadLibrary();
+        showMedia(currentMediaId);
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Download
+    // ═══════════════════════════════════════════════════════════════
+    function downloadMedia() {
+        if (currentMediaId) {
+            window.location.href = `/api/download/${currentMediaId}`;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Jobs
+    // ═══════════════════════════════════════════════════════════════
+    async function loadJobs() {
+        try {
+            const res = await fetch('/api/jobs');
+            const data = await res.json();
+            jobsData = data.jobs;
+            displayJobs(jobsData);
+        } catch (e) {
+            console.error('Error loading jobs:', e);
+        }
+    }
+
+    function displayJobs(jobs) {
+        const container = document.getElementById('jobs-list');
+        if (jobs.length === 0) {
+            container.innerHTML = '<p class="text-center py-12 opacity-50">No rip jobs yet. Insert a disc or click "Rip a Disc" to start.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="text-xs uppercase opacity-50 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <th class="p-3">Title</th>
+                            <th class="p-3">Status</th>
+                            <th class="p-3">Progress</th>
+                            <th class="p-3">Created</th>
+                            <th class="p-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${jobs.map(job => `
+                            <tr class="border-t border-gray-100 dark:border-gray-700/50" id="job-${job.id}">
+                                <td class="p-3 font-medium">${escHtml(job.title)}</td>
+                                <td class="p-3">${statusBadge(job.status)}</td>
+                                <td class="p-3 w-48">
+                                    ${job.status === 'encoding' ? `
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                                <div class="bg-indigo-500 rounded-full h-2 transition-all duration-300 progress-fill"
+                                                     style="width:${job.progress || 0}%"></div>
+                                            </div>
+                                            <span class="text-xs font-mono progress-text">${(job.progress || 0).toFixed(1)}%</span>
+                                        </div>
+                                    ` : job.status === 'completed' ? '<span class="text-green-500">100%</span>' : '<span class="opacity-30">—</span>'}
+                                </td>
+                                <td class="p-3 text-sm opacity-60">
+                                    ${job.created_at ? new Date(job.created_at).toLocaleString() : '—'}
+                                </td>
+                                <td class="p-3">
+                                    ${['queued', 'encoding'].includes(job.status) ?
+                                        `<button onclick="cancelJob('${job.id}')"
+                                            class="text-red-500 hover:text-red-400 text-sm font-medium">Cancel</button>` : ''}
+                                    ${['failed', 'cancelled'].includes(job.status) ?
+                                        `<button onclick="retryJob('${job.id}')"
+                                            class="text-indigo-500 hover:text-indigo-400 text-sm font-medium">Retry</button>` : ''}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function statusBadge(status) {
+        const styles = {
+            queued:    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+            encoding:  'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+            completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+            failed:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+            cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+        };
+        return `<span class="px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] || ''}">${status}</span>`;
+    }
+
+    function updateJobProgress(data) {
+        const row = document.getElementById(`job-${data.id}`);
+        if (row) {
+            const bar = row.querySelector('.progress-fill');
+            const text = row.querySelector('.progress-text');
+            if (bar) bar.style.width = `${data.progress}%`;
+            if (text) text.textContent = `${data.progress.toFixed(1)}%`;
+        }
+    }
+
+    async function cancelJob(id) {
+        await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
+        loadJobs();
+    }
+
+    async function retryJob(id) {
+        await fetch(`/api/jobs/${id}/retry`, { method: 'POST' });
+        loadJobs();
+    }
+
+    function showRipForm() {
+        document.getElementById('rip-source').value = '';
+        document.getElementById('rip-title').value = '';
+        document.getElementById('rip-title-num').value = '1';
+        document.getElementById('rip-modal').classList.remove('hidden');
+    }
+
+    function closeRipModal() {
+        document.getElementById('rip-modal').classList.add('hidden');
+    }
+
+    async function submitRipJob() {
+        const source = document.getElementById('rip-source').value.trim();
+        const title = document.getElementById('rip-title').value.trim();
+        const titleNum = parseInt(document.getElementById('rip-title-num').value) || 1;
+
+        if (!source) { alert('Source path is required'); return; }
+
+        await fetch('/api/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_path: source,
+                title: title || undefined,
+                title_number: titleNum
+            })
+        });
+
+        closeRipModal();
+        showTab('jobs');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Status Bar
+    // ═══════════════════════════════════════════════════════════════
+    function updateStatusBar(data) {
+        const bar = document.getElementById('status-bar');
+        bar.classList.remove('hidden');
+        document.getElementById('status-title').textContent = data.title || 'Encoding...';
+        document.getElementById('status-percent').textContent = `${(data.progress || 0).toFixed(1)}%`;
+        document.getElementById('status-eta').textContent = data.eta ? `ETA: ${data.eta}` : '';
+        document.getElementById('status-progress-bar').style.width = `${data.progress || 0}%`;
+    }
+
+    function hideStatusBar() {
+        document.getElementById('status-bar').classList.add('hidden');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Collections
+    // ═══════════════════════════════════════════════════════════════
+    async function loadCollections() {
+        try {
+            const res = await fetch('/api/collections');
+            const data = await res.json();
+            collectionsData = data.collections;
+            displayCollections(collectionsData);
+        } catch (e) {
+            console.error('Error loading collections:', e);
+        }
+    }
+
+    function displayCollections(collections) {
+        const container = document.getElementById('collections-list');
+        if (collections.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-12 opacity-50">
+                    <div class="text-5xl mb-4">📁</div>
+                    <p>No collections yet. Add movies to collections from the media detail view.</p>
+                </div>`;
+            return;
+        }
+        container.innerHTML = collections.map(col => `
+            <div class="mb-8 fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">${escHtml(col.name)}
+                        <span class="text-sm font-normal opacity-50 ml-2">${col.items.length} items</span>
+                    </h3>
+                    <button onclick="deleteCollection('${escAttr(col.name)}')"
+                        class="text-red-500 hover:text-red-400 text-sm">Delete</button>
+                </div>
+                <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+                    ${col.items.map(item => `
+                        <div class="bg-white dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer
+                                    hover:-translate-y-1 transition-transform shadow-sm"
+                             onclick="showMedia('${item.id}')">
+                            <div class="h-[200px] bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                                ${item.has_poster ?
+                                    `<img src="/api/poster/${item.id}" class="w-full h-full object-cover" loading="lazy">` :
+                                    '<span class="text-4xl">🎬</span>'}
+                            </div>
+                            <div class="p-2 text-sm truncate">${escHtml(item.title)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function deleteCollection(name) {
+        if (!confirm(`Delete collection "${name}"?`)) return;
+        await fetch(`/api/collections/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        loadCollections();
+    }
+
+    async function addToCollection() {
+        if (!currentMediaId) return;
+        const name = prompt('Enter collection name:');
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim();
+
+        // Get existing items in collection (if any)
+        let existingIds = [];
+        try {
+            const res = await fetch('/api/collections');
+            const data = await res.json();
+            const existing = data.collections.find(c => c.name === cleanName);
+            if (existing) existingIds = existing.items.map(i => i.id);
+        } catch (e) {}
+
+        if (existingIds.includes(currentMediaId)) {
+            alert('Already in this collection');
+            return;
+        }
+        existingIds.push(currentMediaId);
+
+        await fetch(`/api/collections/${encodeURIComponent(cleanName)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media_ids: existingIds })
+        });
+
+        alert(`Added to "${cleanName}"`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Dark Mode
+    // ═══════════════════════════════════════════════════════════════
+    function initDarkMode() {
+        const saved = localStorage.getItem('darkMode');
+        if (saved === 'false') {
+            document.documentElement.classList.remove('dark');
+        }
+        updateDarkModeIcon();
+    }
+
+    function toggleDarkMode() {
+        document.documentElement.classList.toggle('dark');
+        const isDark = document.documentElement.classList.contains('dark');
+        localStorage.setItem('darkMode', String(isDark));
+        updateDarkModeIcon();
+    }
+
+    function updateDarkModeIcon() {
+        const isDark = document.documentElement.classList.contains('dark');
+        const el = document.getElementById('dark-mode-icon');
+        if (el) el.textContent = isDark ? '☀️' : '🌙';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Utilities
+    // ═══════════════════════════════════════════════════════════════
+    function escHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function escAttr(str) {
+        return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Init
+    // ═══════════════════════════════════════════════════════════════
+    initDarkMode();
+    loadLibrary();
+    </script>
+</body>
+</html>

@@ -27,7 +27,7 @@ class MetadataExtractor:
         """
         self.config = load_config(config_path)
         self.logger = setup_logger('metadata', 'metadata.log')
-        self.metadata_dir = Path(self.config['output']['base_directory']).parent / 'data' / 'metadata'
+        self.metadata_dir = Path('/Users/poppemacmini/Media/data/metadata')
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
         self.tmdb_api_key = os.getenv('TMDB_API_KEY')
         self.logger.info("MetadataExtractor initialized")
@@ -219,8 +219,13 @@ class MetadataExtractor:
                 'rating': movie_data.get('vote_average'),
                 'tmdb_id': movie_id,
                 'poster_path': movie_data.get('poster_path'),
-                'backdrop_path': movie_data.get('backdrop_path')
+                'backdrop_path': movie_data.get('backdrop_path'),
+                'collection_name': None
             }
+            
+            # Extract collection info (e.g., "The Dark Knight Collection")
+            if movie_data.get('belongs_to_collection'):
+                metadata['collection_name'] = movie_data['belongs_to_collection'].get('name')
             
             # Add director and cast
             if 'crew' in credits_data:

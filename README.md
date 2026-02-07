@@ -1,4 +1,4 @@
-# DVD/CD Media Ripping & Digital Library System
+# Media Library System
 
 A comprehensive automated system for ripping physical media (DVDs, CDs) and creating a searchable digital library with web-based access.
 

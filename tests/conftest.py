@@ -15,14 +15,43 @@ def test_config():
             "base_directory": "/tmp/test_media_library",
             "format": "mp4",
             "video_encoder": "x264",
-            "quality": 22
+            "quality": 22,
+            "audio_encoder": "aac",
+            "audio_bitrate": "192"
         },
         "metadata": {
             "save_to_json": True,
-            "extract_chapters": True
+            "extract_chapters": True,
+            "extract_subtitles": True,
+            "extract_audio_tracks": True,
+            "fetch_online_metadata": True
         },
         "automation": {
-            "auto_detect_disc": False
+            "auto_detect_disc": False,
+            "auto_eject_after_rip": False,
+            "notification_enabled": False
+        },
+        "web_server": {
+            "enabled": True,
+            "port": 8097,
+            "host": "127.0.0.1",
+            "library_name": "Test Library"
+        },
+        "disc_detection": {
+            "check_interval_seconds": 5,
+            "mount_path": "/Volumes"
+        },
+        "handbrake": {
+            "preset": "Fast 1080p30",
+            "additional_options": []
+        },
+        "auth": {
+            "enabled": False,
+            "token": "test-token",
+            "session_hours": 24
+        },
+        "library_cache": {
+            "ttl_seconds": 300
         }
     }
 
@@ -32,6 +61,16 @@ def test_output_dir(tmp_path_factory):
     """Create temporary output directory for tests"""
     output_dir = tmp_path_factory.mktemp("media_output")
     return output_dir
+
+
+@pytest.fixture
+def app_state(tmp_path):
+    """Create an AppState with a temporary database"""
+    from src.app_state import AppState
+    AppState.reset()
+    state = AppState(db_path=str(tmp_path / 'test.db'))
+    yield state
+    AppState.reset()
 
 
 @pytest.fixture

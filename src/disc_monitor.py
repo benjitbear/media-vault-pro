@@ -4,29 +4,40 @@ Disc detection and automatic ripping daemon
 import os
 import time
 from pathlib import Path
-from typing import Set, Optional
+from typing import Set, Optional, TYPE_CHECKING
 import signal
 import sys
 
 from .ripper import Ripper
 from .metadata import MetadataExtractor
-from .utils import load_config, setup_logger, send_notification
+from .utils import load_config, setup_logger, send_notification, configure_notifications
+
+if TYPE_CHECKING:
+    from .app_state import AppState
 
 
 class DiscMonitor:
     """Monitors for disc insertion and triggers automatic ripping"""
     
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.json", app_state: 'AppState' = None):
         """
         Initialize the DiscMonitor
         
         Args:
             config_path: Path to configuration file
+            app_state: Optional shared AppState for job queue integration
         """
         self.config = load_config(config_path)
-        self.logger = setup_logger('disc_monitor', 'disc_monitor.log')
-        self.ripper = Ripper(config_path)
+        debug_mode = self.config.get('logging', {}).get('debug', False)
+        self.logger = setup_logger('disc_monitor', 'disc_monitor.log', debug=debug_mode)
+
+        # Honour notification config
+        notify_enabled = self.config.get('automation', {}).get('notification_enabled', True)
+        configure_notifications(notify_enabled)
+
+        self.ripper = Ripper(config_path, app_state=app_state)
         self.metadata_extractor = MetadataExtractor(config_path)
+        self.app_state = app_state
         
         self.mount_path = Path(self.config['disc_detection']['mount_path'])
         self.check_interval = self.config['disc_detection']['check_interval_seconds']
@@ -115,7 +126,9 @@ class DiscMonitor:
     
     def process_disc(self, volume_name: str):
         """
-        Process a newly detected disc
+        Process a newly detected disc.
+        If app_state is available, enqueues a job for the worker thread.
+        Otherwise, falls back to direct ripping (standalone mode).
         
         Args:
             volume_name: Name of the volume
@@ -125,12 +138,25 @@ class DiscMonitor:
         self.logger.info(f"Processing new disc: {volume_name}")
         send_notification("Disc Detected", f"Found: {volume_name}")
         
-        # Extract title guess
         title_guess = self.extract_title_from_volume(volume_name)
         
+        # If we have app_state, use the job queue
+        if self.app_state:
+            job_id = self.app_state.create_job(
+                title=title_guess,
+                source_path=str(volume_path),
+                title_number=1
+            )
+            self.logger.info(f"Enqueued rip job {job_id} for: {volume_name}")
+            self.app_state.broadcast('disc_detected', {
+                'volume_name': volume_name,
+                'job_id': job_id
+            })
+            return
+        
+        # Fallback: direct ripping (standalone mode)
         try:
-            # Rip the disc
-            self.logger.info(f"Starting rip for: {volume_name}")
+            self.logger.info(f"Starting direct rip for: {volume_name}")
             output_file = self.ripper.rip_disc(
                 source_path=str(volume_path),
                 title_name=title_guess
@@ -139,7 +165,6 @@ class DiscMonitor:
             if output_file:
                 self.logger.info(f"Rip successful: {output_file}")
                 
-                # Extract and save metadata
                 if self.config['metadata']['save_to_json']:
                     self.logger.info("Extracting metadata...")
                     metadata = self.metadata_extractor.extract_full_metadata(
