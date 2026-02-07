@@ -1,0 +1,36 @@
+{
+  "output": {
+    "base_directory": "/Users/poppemacmini/Documents/MediaLibrary",
+    "format": "mp4",
+    "video_encoder": "x264",
+    "quality": 22,
+    "audio_encoder": "aac",
+    "audio_bitrate": "192"
+  },
+  "metadata": {
+    "save_to_json": true,
+    "extract_chapters": true,
+    "extract_subtitles": true,
+    "extract_audio_tracks": true,
+    "fetch_online_metadata": true
+  },
+  "automation": {
+    "auto_detect_disc": true,
+    "auto_eject_after_rip": true,
+    "notification_enabled": true
+  },
+  "web_server": {
+    "enabled": true,
+    "port": 8096,
+    "host": "0.0.0.0",
+    "library_name": "My Media Library"
+  },
+  "disc_detection": {
+    "check_interval_seconds": 5,
+    "mount_path": "/Volumes"
+  },
+  "handbrake": {
+    "preset": "Fast 1080p30",
+    "additional_options": []
+  }
+}
