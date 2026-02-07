@@ -219,7 +219,10 @@ class MediaServer:
     # ── Range Request Support ────────────────────────────────────
 
     def _send_file_partial(self, file_path: str, mimetype: str = 'video/mp4'):
-        """Send file with HTTP range request support for video seeking"""
+        """Send file with HTTP range request support and chunked streaming.
+        Streams data in 256KB chunks so playback can begin immediately
+        without loading the entire file into memory."""
+        CHUNK_SIZE = 256 * 1024  # 256 KB
         file_size = os.path.getsize(file_path)
         range_header = request.headers.get('Range')
 
@@ -231,18 +234,37 @@ class MediaServer:
                 byte_end = min(byte_end, file_size - 1)
                 length = byte_end - byte_start + 1
 
-                with open(file_path, 'rb') as f:
-                    f.seek(byte_start)
-                    data = f.read(length)
+                def generate_range():
+                    with open(file_path, 'rb') as f:
+                        f.seek(byte_start)
+                        remaining = length
+                        while remaining > 0:
+                            chunk = f.read(min(CHUNK_SIZE, remaining))
+                            if not chunk:
+                                break
+                            remaining -= len(chunk)
+                            yield chunk
 
-                resp = Response(data, 206, mimetype=mimetype, direct_passthrough=True)
+                resp = Response(generate_range(), 206, mimetype=mimetype,
+                                direct_passthrough=True)
                 resp.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
                 resp.headers['Accept-Ranges'] = 'bytes'
                 resp.headers['Content-Length'] = str(length)
                 return resp
 
-        resp = make_response(send_file(file_path, mimetype=mimetype))
+        # Full file — also stream in chunks
+        def generate_full():
+            with open(file_path, 'rb') as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        resp = Response(generate_full(), 200, mimetype=mimetype,
+                        direct_passthrough=True)
         resp.headers['Accept-Ranges'] = 'bytes'
+        resp.headers['Content-Length'] = str(file_size)
         return resp
 
     # ── Routes ───────────────────────────────────────────────────
@@ -763,6 +785,70 @@ class MediaServer:
                 'podcasts': len(pods),
                 'collections': len(collections),
             })
+
+        # ─── Playback Progress API ───
+
+        @self.app.route('/api/media/<media_id>/progress')
+        def api_get_progress(media_id):
+            """Get saved playback position for a media item"""
+            user = getattr(request, 'current_user', None)
+            username = user.get('username', 'anonymous') if user else 'anonymous'
+            prog = self.app_state.get_playback_progress(media_id, username)
+            if prog:
+                return jsonify(prog)
+            return jsonify({'position_seconds': 0, 'duration_seconds': 0,
+                            'finished': 0})
+
+        @self.app.route('/api/media/<media_id>/progress', methods=['PUT'])
+        def api_save_progress(media_id):
+            """Save playback position for a media item"""
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data'}), 400
+            user = getattr(request, 'current_user', None)
+            username = user.get('username', 'anonymous') if user else 'anonymous'
+            self.app_state.save_playback_progress(
+                media_id=media_id,
+                position_seconds=float(data.get('position', 0)),
+                duration_seconds=float(data.get('duration', 0)),
+                username=username
+            )
+            return jsonify({'status': 'saved'})
+
+        @self.app.route('/api/media/<media_id>/progress', methods=['DELETE'])
+        def api_clear_progress(media_id):
+            """Clear playback progress (mark as unwatched)"""
+            user = getattr(request, 'current_user', None)
+            username = user.get('username', 'anonymous') if user else 'anonymous'
+            self.app_state.clear_playback_progress(media_id, username)
+            return jsonify({'status': 'cleared'})
+
+        @self.app.route('/api/continue-watching')
+        def api_continue_watching():
+            """Get list of in-progress media for current user"""
+            user = getattr(request, 'current_user', None)
+            username = user.get('username', 'anonymous') if user else 'anonymous'
+            items = self.app_state.get_in_progress_media(username)
+            safe = self._safe_items(items)
+            # Attach progress info to each safe item
+            for i, item in enumerate(items):
+                safe[i]['progress_position'] = item.get('progress_position', 0)
+                safe[i]['progress_duration'] = item.get('progress_duration', 0)
+            return jsonify({'items': safe})
+
+        @self.app.route('/api/collections/<int:col_id>/items')
+        def api_collection_items(col_id):
+            """Get ordered media items for a collection (for queue playback)"""
+            conn = self.app_state._get_conn()
+            items = conn.execute("""
+                SELECT m.* FROM media m
+                JOIN collection_items ci ON m.id = ci.media_id
+                WHERE ci.collection_id = ?
+                ORDER BY ci.sort_order
+            """, (col_id,)).fetchall()
+            media = [self.app_state._media_row_to_dict(r) for r in items]
+            safe = self._safe_items(media)
+            return jsonify({'items': safe})
 
     # ── WebSocket ────────────────────────────────────────────────
 

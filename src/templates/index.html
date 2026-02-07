@@ -15,6 +15,7 @@
         .drop-zone { border: 2px dashed transparent; transition: all 0.3s; }
         .drop-zone.dragover { border-color: #6366f1; background: rgba(99,102,241,0.08); }
         .type-badge { font-size: 0.65rem; letter-spacing: 0.05em; }
+        .progress-thumb { position: absolute; bottom: 0; left: 0; height: 3px; background: #6366f1; transition: width 0.3s; }
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
@@ -231,8 +232,8 @@
                 <button onclick="closeModal()" class="text-white text-3xl hover:opacity-70 leading-none">&times;</button>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-2xl">
-                <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls></video>
-                <audio id="modal-audio" class="hidden w-full" controls></audio>
+                <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls preload="metadata"></video>
+                <audio id="modal-audio" class="hidden w-full" controls preload="metadata"></audio>
                 <div class="p-6">
                     <div id="modal-info" class="text-gray-900 dark:text-white"></div>
                     <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -248,6 +249,17 @@
                             class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
                             📁 Add to Collection
                         </button>
+                        <button id="btn-restart" onclick="restartMedia()" class="hidden
+                            px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
+                            ⏮️ Start Over
+                        </button>
+                    </div>
+                    <!-- Queue nav (visible when playing from collection) -->
+                    <div id="queue-nav" class="hidden flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <button onclick="queuePrev()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">⏮ Previous</button>
+                        <span id="queue-position" class="text-sm opacity-60"></span>
+                        <button onclick="queueNext()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">Next ⏭</button>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -382,6 +394,11 @@
     let currentTab = 'library';
     let currentMediaId = null;
     let currentMediaItem = null;
+    let progressSaveInterval = null;
+    let continueWatchingData = [];
+    let playbackQueue = [];
+    let playbackQueueIndex = -1;
+    let isShuffled = false;
 
     // ═══════════════════════════════════════════════════════════════
     // WebSocket (Socket.IO)
@@ -446,6 +463,12 @@
             const res = await fetch('/api/library');
             const data = await res.json();
             libraryData = data.items;
+            // Also load continue watching
+            try {
+                const cwRes = await fetch('/api/continue-watching');
+                const cwData = await cwRes.json();
+                continueWatchingData = cwData.items || [];
+            } catch (e) { continueWatchingData = []; }
             displayLibrary(libraryData);
             document.getElementById('library-count').textContent =
                 `${data.count} item${data.count !== 1 ? 's' : ''} in your vault`;
@@ -473,8 +496,47 @@
             document: 'bg-amber-500', other: 'bg-gray-500'
         };
 
-        grid.innerHTML = items.map(item => {
+        // Build continue-watching section
+        let cwHtml = '';
+        if (continueWatchingData.length > 0 && items === libraryData) {
+            cwHtml = `
+            <div class="col-span-full mb-6 fade-in">
+                <h3 class="text-lg font-bold mb-3 flex items-center gap-2">▶️ Continue Watching</h3>
+                <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+                    ${continueWatchingData.map(cw => {
+                        const pct = cw.progress_duration > 0 ? Math.round((cw.progress_position / cw.progress_duration) * 100) : 0;
+                        const mt = cw.media_type || 'video';
+                        return `
+                        <div class="flex-shrink-0 w-[180px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden cursor-pointer
+                                    transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group"
+                             onclick="showMedia('${cw.id}')">
+                            <div class="relative w-full h-[110px] bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-4xl overflow-hidden">
+                                ${cw.has_poster ?
+                                    `<img src="/api/poster/${cw.id}" alt="${escHtml(cw.title)}" class="w-full h-full object-cover" loading="lazy">` :
+                                    typeIcons[mt] || '📎'}
+                                <div class="progress-thumb" style="width:${pct}%"></div>
+                            </div>
+                            <div class="p-2">
+                                <div class="text-sm font-medium truncate">${escHtml(cw.title)}</div>
+                                <div class="text-xs opacity-50">${pct}% · ${formatDuration(cw.progress_position)} left</div>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+        }
+
+        // Build progress lookup for cards
+        const progressMap = {};
+        continueWatchingData.forEach(cw => {
+            if (cw.progress_duration > 0) {
+                progressMap[cw.id] = Math.round((cw.progress_position / cw.progress_duration) * 100);
+            }
+        });
+
+        grid.innerHTML = cwHtml + items.map(item => {
             const mt = item.media_type || 'video';
+            const pct = progressMap[item.id] || 0;
             return `
             <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden cursor-pointer
                         transition-all duration-200 hover:-translate-y-1 hover:shadow-lg
@@ -487,6 +549,7 @@
                               loading="lazy">` :
                         typeIcons[mt] || '📎'}
                     <span class="absolute top-2 right-2 type-badge px-1.5 py-0.5 rounded text-white font-bold uppercase ${typeColors[mt] || 'bg-gray-500'}">${mt}</span>
+                    ${pct > 0 ? `<div class="progress-thumb" style="width:${pct}%"></div>` : ''}
                 </div>
                 <div class="p-4">
                     <div class="font-semibold mb-1 truncate">${escHtml(item.title)}</div>
@@ -535,19 +598,68 @@
             const audio = document.getElementById('modal-audio');
             const mt = item.media_type || 'video';
 
+            // Fetch saved progress
+            let savedProgress = null;
+            try {
+                const pRes = await fetch(`/api/media/${id}/progress`);
+                savedProgress = await pRes.json();
+            } catch (e) {}
+
+            const restartBtn = document.getElementById('btn-restart');
+
             if (mt === 'audio') {
                 video.classList.add('hidden');
                 video.src = '';
                 audio.classList.remove('hidden');
                 audio.src = `/api/stream/${id}`;
+                setupProgressTracking(audio, id);
+                if (savedProgress && savedProgress.position_seconds > 5 && !savedProgress.finished) {
+                    audio.addEventListener('loadedmetadata', function onLoaded() {
+                        audio.removeEventListener('loadedmetadata', onLoaded);
+                        if (confirm(`Continue from ${formatDuration(savedProgress.position_seconds)}?`)) {
+                            audio.currentTime = savedProgress.position_seconds;
+                        }
+                        audio.play().catch(() => {});
+                    });
+                    restartBtn.classList.remove('hidden');
+                } else {
+                    restartBtn.classList.add('hidden');
+                }
             } else if (mt === 'video') {
                 audio.classList.add('hidden');
                 audio.src = '';
                 video.classList.remove('hidden');
                 video.src = `/api/stream/${id}`;
+                setupProgressTracking(video, id);
+                if (savedProgress && savedProgress.position_seconds > 5 && !savedProgress.finished) {
+                    video.addEventListener('loadedmetadata', function onLoaded() {
+                        video.removeEventListener('loadedmetadata', onLoaded);
+                        if (confirm(`Continue from ${formatDuration(savedProgress.position_seconds)}?`)) {
+                            video.currentTime = savedProgress.position_seconds;
+                        }
+                        video.play().catch(() => {});
+                    });
+                    restartBtn.classList.remove('hidden');
+                } else {
+                    restartBtn.classList.add('hidden');
+                }
             } else {
-                // document / image / other — hide both players
                 video.classList.add('hidden');
+                video.src = '';
+                audio.classList.add('hidden');
+                audio.src = '';
+                restartBtn.classList.add('hidden');
+            }
+
+            // Show queue navigation if playing from a collection
+            const queueNav = document.getElementById('queue-nav');
+            if (playbackQueue.length > 1) {
+                queueNav.classList.remove('hidden');
+                document.getElementById('queue-position').textContent =
+                    `${playbackQueueIndex + 1} of ${playbackQueue.length}`;
+            } else {
+                queueNav.classList.add('hidden');
+            }
                 video.src = '';
                 audio.classList.add('hidden');
                 audio.src = '';
@@ -577,11 +689,21 @@
     function closeModal() {
         const video = document.getElementById('modal-video');
         const audio = document.getElementById('modal-audio');
+        // Save progress before closing
+        const activePlayer = !video.classList.contains('hidden') ? video :
+                             !audio.classList.contains('hidden') ? audio : null;
+        if (activePlayer && currentMediaId && activePlayer.currentTime > 0) {
+            saveProgress(currentMediaId, activePlayer.currentTime, activePlayer.duration || 0);
+        }
+        if (progressSaveInterval) { clearInterval(progressSaveInterval); progressSaveInterval = null; }
         video.pause(); video.src = '';
         audio.pause(); audio.src = '';
         document.getElementById('modal').classList.add('hidden');
+        document.getElementById('queue-nav').classList.add('hidden');
         currentMediaId = null;
         currentMediaItem = null;
+        // Refresh continue-watching data
+        loadLibrary();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -628,6 +750,86 @@
 
     function closeEditModal() {
         document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Playback Progress Tracking
+    // ═══════════════════════════════════════════════════════════════
+    function setupProgressTracking(playerEl, mediaId) {
+        // Clear any existing interval
+        if (progressSaveInterval) clearInterval(progressSaveInterval);
+        // Save every 10 seconds while playing
+        progressSaveInterval = setInterval(() => {
+            if (!playerEl.paused && playerEl.currentTime > 0) {
+                saveProgress(mediaId, playerEl.currentTime, playerEl.duration || 0);
+            }
+        }, 10000);
+        // Also save on pause
+        playerEl.onpause = () => {
+            if (playerEl.currentTime > 0) {
+                saveProgress(mediaId, playerEl.currentTime, playerEl.duration || 0);
+            }
+        };
+        // Auto-advance queue when track ends
+        playerEl.onended = () => {
+            saveProgress(mediaId, playerEl.duration, playerEl.duration || 0);
+            if (playbackQueue.length > 1 && playbackQueueIndex < playbackQueue.length - 1) {
+                queueNext();
+            }
+        };
+    }
+
+    function saveProgress(mediaId, position, duration) {
+        fetch(`/api/media/${mediaId}/progress`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position, duration })
+        }).catch(() => {});
+    }
+
+    function restartMedia() {
+        const video = document.getElementById('modal-video');
+        const audio = document.getElementById('modal-audio');
+        const player = !video.classList.contains('hidden') ? video : audio;
+        player.currentTime = 0;
+        player.play().catch(() => {});
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Collection Queue Playback + Shuffle
+    // ═══════════════════════════════════════════════════════════════
+    function playCollection(colId, shuffle) {
+        // Find collection in loaded data
+        const col = collectionsData.find(c => c.id === colId);
+        if (!col || !col.items.length) return;
+
+        playbackQueue = col.items.map(i => i.id);
+        if (shuffle) {
+            // Fisher-Yates shuffle
+            for (let i = playbackQueue.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [playbackQueue[i], playbackQueue[j]] = [playbackQueue[j], playbackQueue[i]];
+            }
+            isShuffled = true;
+        } else {
+            isShuffled = false;
+        }
+        playbackQueueIndex = 0;
+        showMedia(playbackQueue[0]);
+    }
+
+    function queueNext() {
+        if (playbackQueueIndex < playbackQueue.length - 1) {
+            playbackQueueIndex++;
+            showMedia(playbackQueue[playbackQueueIndex]);
+        }
+    }
+
+    function queuePrev() {
+        if (playbackQueueIndex > 0) {
+            playbackQueueIndex--;
+            showMedia(playbackQueue[playbackQueueIndex]);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -814,9 +1016,22 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-bold">${escHtml(col.name)}
                         <span class="text-sm font-normal opacity-50 ml-2">${col.items.length} items</span>
+                        ${col.collection_type === 'playlist' ? '<span class="text-xs ml-2 px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">playlist</span>' : ''}
                     </h3>
-                    <button onclick="deleteCollection('${escAttr(col.name)}')"
-                        class="text-red-500 hover:text-red-400 text-sm">Delete</button>
+                    <div class="flex gap-2">
+                        ${col.items.length > 0 ? `
+                        <button onclick="playCollection(${col.id}, false)"
+                            class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium">
+                            ▶ Play
+                        </button>
+                        <button onclick="playCollection(${col.id}, true)"
+                            class="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium"
+                            title="Shuffle play">
+                            🔀 Shuffle
+                        </button>` : ''}
+                        <button onclick="deleteCollection('${escAttr(col.name)}')"
+                            class="text-red-500 hover:text-red-400 text-sm">Delete</button>
+                    </div>
                 </div>
                 <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                     ${col.items.map(item => `
