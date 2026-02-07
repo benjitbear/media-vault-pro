@@ -3,6 +3,7 @@ Unified entry point for Media Ripper.
 Starts the web server, disc monitor, and job worker in a single process.
 """
 import argparse
+import json
 import os
 import signal
 import sys
@@ -36,7 +37,9 @@ def job_worker(app_state: AppState, ripper: Ripper,
                 continue
 
             job_id = job['id']
-            logger.info(f"Processing job {job_id}: {job['title']}")
+            disc_type = job.get('disc_type', 'dvd')
+            disc_hints = json.loads(job.get('disc_hints', '{}'))
+            logger.info(f"Processing job {job_id}: {job['title']} ({disc_type})")
 
             # Mark as encoding
             app_state.update_job_status(
@@ -44,13 +47,20 @@ def job_worker(app_state: AppState, ripper: Ripper,
                 started_at=datetime.now().isoformat()
             )
 
-            # Run the ripper
-            output = ripper.rip_disc(
-                source_path=job['source_path'],
-                title_name=job['title'],
-                title_number=job.get('title_number', 1),
-                job_id=job_id
-            )
+            # Run the appropriate ripper based on disc type
+            if disc_type == 'audio_cd':
+                output = ripper.rip_audio_cd(
+                    source_path=job['source_path'],
+                    album_name=job['title'],
+                    job_id=job_id
+                )
+            else:
+                output = ripper.rip_disc(
+                    source_path=job['source_path'],
+                    title_name=job['title'],
+                    title_number=job.get('title_number', 1),
+                    job_id=job_id
+                )
 
             if output:
                 app_state.update_job_status(
@@ -66,7 +76,8 @@ def job_worker(app_state: AppState, ripper: Ripper,
                     try:
                         logger.info(f"Extracting metadata for job {job_id}")
                         metadata = metadata_extractor.extract_full_metadata(
-                            output, title_hint=job['title']
+                            output, title_hint=job['title'],
+                            disc_hints=disc_hints
                         )
                         # Save with output file stem so scan_library can find it
                         output_stem = Path(output).stem

@@ -87,6 +87,8 @@ class AppState:
                 title TEXT NOT NULL,
                 source_path TEXT NOT NULL,
                 title_number INTEGER DEFAULT 1,
+                disc_type TEXT DEFAULT 'dvd',
+                disc_hints TEXT DEFAULT '{}',
                 status TEXT DEFAULT 'queued',
                 progress REAL DEFAULT 0,
                 eta TEXT,
@@ -135,6 +137,14 @@ class AppState:
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE sessions ADD COLUMN username TEXT")
             conn.commit()
+
+        # Migrate: add disc_type and disc_hints columns to jobs if missing
+        for col, default in [('disc_type', "'dvd'"), ('disc_hints', "'{}'")]:
+            try:
+                conn.execute(f"SELECT {col} FROM jobs LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT DEFAULT {default}")
+                conn.commit()
 
     def set_socketio(self, socketio):
         """Set the SocketIO instance for broadcasting events"""
@@ -260,17 +270,23 @@ class AppState:
 
     # ── Jobs ─────────────────────────────────────────────────────────
 
-    def create_job(self, title: str, source_path: str, title_number: int = 1) -> str:
+    def create_job(self, title: str, source_path: str, title_number: int = 1,
+                    disc_type: str = 'dvd',
+                    disc_hints: Optional[Dict[str, Any]] = None) -> str:
         """Create a new rip job, returns job ID"""
         job_id = str(uuid.uuid4())[:8]
+        hints_json = json.dumps(disc_hints or {})
         conn = self._get_conn()
         conn.execute("""
-            INSERT INTO jobs (id, title, source_path, title_number, status, created_at)
-            VALUES (?, ?, ?, ?, 'queued', ?)
-        """, (job_id, title, source_path, title_number, datetime.now().isoformat()))
+            INSERT INTO jobs (id, title, source_path, title_number,
+                             disc_type, disc_hints, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
+        """, (job_id, title, source_path, title_number,
+              disc_type, hints_json, datetime.now().isoformat()))
         conn.commit()
-        self.broadcast('job_created', {'id': job_id, 'title': title, 'status': 'queued'})
-        self.logger.info(f"Job created: {job_id} - {title}")
+        self.broadcast('job_created', {'id': job_id, 'title': title,
+                                       'status': 'queued', 'disc_type': disc_type})
+        self.logger.info(f"Job created: {job_id} - {title} ({disc_type})")
         return job_id
 
     def get_all_jobs(self) -> List[Dict[str, Any]]:

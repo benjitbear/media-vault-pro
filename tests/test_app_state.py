@@ -145,6 +145,18 @@ class TestAppState:
         assert job['status'] == 'queued'
         assert job['source_path'] == '/Volumes/DVD'
 
+    def test_create_job_with_disc_type(self, app_state):
+        """Test creating a job with disc_type and disc_hints"""
+        hints = {'track_count': 12, 'total_duration_seconds': 3200}
+        job_id = app_state.create_job(
+            'My Album', '/Volumes/CD', 1,
+            disc_type='audio_cd', disc_hints=hints
+        )
+        job = app_state.get_job(job_id)
+        assert job['disc_type'] == 'audio_cd'
+        parsed_hints = json.loads(job['disc_hints'])
+        assert parsed_hints['track_count'] == 12
+
     def test_job_queue_ordering(self, app_state):
         """Test that jobs are queued in FIFO order"""
         id1 = app_state.create_job('First', '/vol/1')

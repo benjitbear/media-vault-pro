@@ -268,6 +268,98 @@ class Ripper:
             self.logger.info(f"Ejected disc: {disc_path}")
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"Failed to eject disc: {e}")
+
+    def rip_audio_cd(self, source_path: str, album_name: Optional[str] = None,
+                     job_id: Optional[str] = None) -> Optional[str]:
+        """
+        Rip an audio CD to individual track files using ffmpeg.
+        macOS mounts audio CDs as .aiff files in /Volumes/<disc>.
+
+        Args:
+            source_path: Path to mounted audio CD volume
+            album_name: Album name for organising output
+            job_id: Optional job ID for progress reporting
+
+        Returns:
+            Path to the output directory containing ripped tracks, or None
+        """
+        self.logger.info(f"Starting audio CD rip for: {source_path}")
+
+        volume = Path(source_path)
+        if not volume.exists():
+            self.logger.error(f"Source path does not exist: {source_path}")
+            return None
+
+        # Collect audio track files
+        audio_extensions = {'.aiff', '.aif', '.wav', '.cda'}
+        audio_files = sorted([
+            f for f in volume.iterdir()
+            if f.suffix.lower() in audio_extensions
+        ])
+
+        if not audio_files:
+            self.logger.error("No audio tracks found on disc")
+            send_notification("Rip Failed", "No audio tracks found on CD")
+            return None
+
+        # Create output directory
+        safe_album = sanitize_filename(album_name or volume.name)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        album_dir = self.output_dir / f"{safe_album}_{timestamp}"
+        album_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger.info(f"Ripping {len(audio_files)} tracks to: {album_dir}")
+        send_notification("Ripping Started", f"Audio CD: {album_name or volume.name}")
+
+        total = len(audio_files)
+        ripped = 0
+
+        for idx, track_file in enumerate(audio_files, 1):
+            track_name = track_file.stem
+            output_file = album_dir / f"{idx:02d} - {sanitize_filename(track_name)}.mp3"
+
+            self.logger.info(f"  Track {idx}/{total}: {track_name}")
+            try:
+                cmd = [
+                    'ffmpeg', '-y', '-i', str(track_file),
+                    '-codec:a', 'libmp3lame', '-qscale:a', '2',
+                    '-id3v2_version', '3',
+                    '-metadata', f'track={idx}/{total}',
+                    '-metadata', f'album={album_name or volume.name}',
+                    '-metadata', f'title={track_name}',
+                    str(output_file)
+                ]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=120
+                )
+                if result.returncode == 0:
+                    ripped += 1
+                else:
+                    self.logger.error(f"  ffmpeg error for track {idx}: {result.stderr[-200:]}")
+            except Exception as e:
+                self.logger.error(f"  Error ripping track {idx}: {e}")
+
+            # Progress reporting
+            pct = (idx / total) * 100
+            if self.show_progress:
+                print_progress(pct, title=track_name)
+            if job_id and self.app_state:
+                self.app_state.update_job_progress(
+                    job_id, pct, title=track_name
+                )
+
+        if ripped > 0:
+            self.logger.info(f"Audio CD rip completed: {ripped}/{total} tracks")
+            send_notification("Rip Completed", f"{album_name}: {ripped} tracks")
+
+            if self.config['automation'].get('auto_eject_after_rip', True):
+                self.eject_disc(source_path)
+
+            return str(album_dir)
+        else:
+            self.logger.error("Audio CD rip failed — no tracks ripped")
+            send_notification("Rip Failed", f"{album_name}: no tracks ripped")
+            return None
     
     def get_title_list(self, source_path: str) -> list:
         """

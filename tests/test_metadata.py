@@ -73,3 +73,59 @@ class TestMetadataExtractor:
         with open(saved_file) as f:
             loaded = json.load(f)
         assert loaded['title'] == 'Test'
+
+    @pytest.mark.unit
+    def test_clean_search_title(self, extractor):
+        """Test title cleaning strips disc noise from volume names"""
+        assert extractor._clean_search_title('THE_MATRIX') == 'THE MATRIX'
+        assert 'DVD' not in extractor._clean_search_title('MOVIE_DVD')
+        assert 'DISC' not in extractor._clean_search_title('MOVIE_DISC_1')
+        assert 'WIDESCREEN' not in extractor._clean_search_title('MOVIE_WIDESCREEN')
+        # Timestamps should be stripped
+        cleaned = extractor._clean_search_title('PRELUDE_20260207_160005')
+        assert '20260207' not in cleaned
+
+    @pytest.mark.unit
+    def test_aggressive_clean_title(self, extractor):
+        """Test aggressive title cleaning removes non-alpha chars"""
+        result = extractor._aggressive_clean_title('M0V13_2024!!!')
+        assert result.isalpha() or ' ' in result
+
+    @pytest.mark.unit
+    def test_pick_best_tmdb_match_no_hints(self, extractor):
+        """Test best match picker falls back to first result without hints"""
+        results = [{'id': 100}, {'id': 200}]
+        assert extractor._pick_best_tmdb_match(results, {}) == 100
+
+    @pytest.mark.unit
+    def test_search_musicbrainz_no_results(self, extractor):
+        """Test MusicBrainz search handles no results gracefully"""
+        with patch('requests.get') as mock_get:
+            mock_get.return_value = Mock(
+                status_code=200,
+                json=lambda: {'releases': []}
+            )
+            mock_get.return_value.raise_for_status = lambda: None
+            result = extractor.search_musicbrainz('Nonexistent Album XYZ123')
+            assert result is None
+
+    @pytest.mark.unit
+    def test_extract_full_metadata_audio_cd(self, extractor, tmp_path):
+        """Test full metadata extraction for audio CD type"""
+        extractor.tmdb_api_key = None  # No API key
+        metadata = extractor.extract_full_metadata(
+            str(tmp_path),
+            title_hint='Test Album',
+            disc_hints={'disc_type': 'audio_cd', 'track_count': 10}
+        )
+        assert metadata['disc_type'] == 'audio_cd'
+
+    @pytest.mark.unit
+    def test_download_backdrop_no_path(self, extractor):
+        """Test backdrop download returns False for None path"""
+        assert extractor.download_backdrop(None, '/tmp/test.jpg') is False
+
+    @pytest.mark.unit
+    def test_download_cover_art_no_url(self, extractor):
+        """Test cover art download returns False for None URL"""
+        assert extractor.download_cover_art(None, '/tmp/test.jpg') is False

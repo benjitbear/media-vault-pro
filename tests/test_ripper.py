@@ -59,3 +59,31 @@ class TestRipper:
         # With non-existent source, should return empty
         result = ripper.get_title_list('/nonexistent')
         assert isinstance(result, list)
+
+    @pytest.mark.unit
+    def test_rip_audio_cd_no_tracks(self, ripper, tmp_path):
+        """Test audio CD rip fails gracefully when no audio tracks found"""
+        empty_dir = tmp_path / "EMPTY_CD"
+        empty_dir.mkdir()
+        result = ripper.rip_audio_cd(source_path=str(empty_dir), album_name="Test")
+        assert result is None
+
+    @pytest.mark.unit
+    def test_rip_audio_cd_nonexistent_path(self, ripper):
+        """Test audio CD rip handles missing path"""
+        result = ripper.rip_audio_cd(source_path='/nonexistent', album_name="Test")
+        assert result is None
+
+    @pytest.mark.unit
+    @patch('subprocess.run')
+    def test_rip_audio_cd_with_tracks(self, mock_run, ripper, tmp_path):
+        """Test audio CD rip processes .aiff files"""
+        cd_dir = tmp_path / "MY_CD"
+        cd_dir.mkdir()
+        (cd_dir / "Track 01.aiff").write_bytes(b'\x00' * 100)
+        (cd_dir / "Track 02.aiff").write_bytes(b'\x00' * 100)
+
+        mock_run.return_value = MagicMock(returncode=0)
+        result = ripper.rip_audio_cd(source_path=str(cd_dir), album_name="Test Album")
+        assert result is not None
+        assert Path(result).exists()

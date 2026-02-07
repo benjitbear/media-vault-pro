@@ -8,6 +8,8 @@ from typing import Set, Optional, TYPE_CHECKING
 import signal
 import sys
 
+import json
+
 from .ripper import Ripper
 from .metadata import MetadataExtractor
 from .utils import load_config, setup_logger, send_notification, configure_notifications
@@ -81,7 +83,7 @@ class DiscMonitor:
     
     def is_disc_volume(self, volume_path: Path) -> bool:
         """
-        Check if a volume appears to be a DVD/CD
+        Check if a volume appears to be a DVD/CD/Blu-ray
         
         Args:
             volume_path: Path to volume
@@ -97,10 +99,142 @@ class DiscMonitor:
         if (volume_path / 'BDMV').exists():
             return True
         
-        # Check for common disc indicators
-        # Could add more sophisticated detection here
+        # Check for audio CD (.aiff/.cda files directly in volume)
+        if self.is_audio_cd(volume_path):
+            return True
         
         return False
+
+    def is_audio_cd(self, volume_path: Path) -> bool:
+        """
+        Check if a volume is an audio CD.
+        macOS mounts audio CDs with .aiff track files.
+        
+        Args:
+            volume_path: Path to volume
+            
+        Returns:
+            True if it appears to be an audio CD
+        """
+        try:
+            audio_extensions = {'.aiff', '.aif', '.cda', '.wav'}
+            for item in volume_path.iterdir():
+                if item.suffix.lower() in audio_extensions:
+                    return True
+        except (PermissionError, OSError):
+            pass
+        return False
+
+    def get_disc_type(self, volume_path: Path) -> str:
+        """
+        Determine the type of disc.
+        
+        Args:
+            volume_path: Path to volume
+            
+        Returns:
+            'dvd', 'bluray', 'audio_cd', or 'unknown'
+        """
+        if (volume_path / 'VIDEO_TS').exists():
+            return 'dvd'
+        if (volume_path / 'BDMV').exists():
+            return 'bluray'
+        if self.is_audio_cd(volume_path):
+            return 'audio_cd'
+        return 'unknown'
+
+    def get_audio_cd_info(self, volume_path: Path) -> dict:
+        """
+        Extract information from an audio CD for metadata lookup.
+        
+        Args:
+            volume_path: Path to the mounted audio CD
+            
+        Returns:
+            Dict with track_count, total_duration, track_durations, etc.
+        """
+        import subprocess
+        info = {
+            'track_count': 0,
+            'total_duration_seconds': 0,
+            'track_durations': [],
+            'track_files': [],
+        }
+        try:
+            audio_files = sorted([
+                f for f in volume_path.iterdir()
+                if f.suffix.lower() in {'.aiff', '.aif', '.wav', '.cda'}
+            ])
+            info['track_count'] = len(audio_files)
+            info['track_files'] = [str(f) for f in audio_files]
+
+            for audio_file in audio_files:
+                try:
+                    result = subprocess.run(
+                        ['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                         '-show_format', str(audio_file)],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    data = json.loads(result.stdout)
+                    duration = float(data.get('format', {}).get('duration', 0))
+                    info['track_durations'].append(duration)
+                    info['total_duration_seconds'] += duration
+                except Exception:
+                    pass
+
+            self.logger.info(
+                f"Audio CD info: {info['track_count']} tracks, "
+                f"{info['total_duration_seconds']:.0f}s total"
+            )
+        except Exception as e:
+            self.logger.error(f"Error reading audio CD info: {e}")
+        return info
+
+    def get_dvd_disc_hints(self, volume_path: Path) -> dict:
+        """
+        Extract hints from a DVD disc for better TMDB matching.
+        Parses IFO files, checks for disc label patterns, estimates runtime.
+        
+        Args:
+            volume_path: Path to DVD volume
+            
+        Returns:
+            Dict with hints: estimated_runtime_min, title_count, disc_label, etc.
+        """
+        import subprocess
+        hints = {
+            'disc_label': volume_path.name,
+            'estimated_runtime_min': None,
+            'title_count': 0,
+        }
+        try:
+            # Use HandBrake scan to get title info including duration
+            result = subprocess.run(
+                ['HandBrakeCLI', '--scan', '--input', str(volume_path)],
+                capture_output=True, text=True, timeout=60
+            )
+            scan_output = result.stderr or ''
+
+            # Parse title durations from scan output
+            import re
+            duration_matches = re.findall(
+                r'\+ duration:\s+(\d+):(\d+):(\d+)', scan_output
+            )
+            if duration_matches:
+                hints['title_count'] = len(duration_matches)
+                # Pick the longest title as the main feature
+                durations_min = []
+                for h, m, s in duration_matches:
+                    dur = int(h) * 60 + int(m) + int(s) / 60
+                    durations_min.append(dur)
+                hints['estimated_runtime_min'] = round(max(durations_min))
+                self.logger.info(
+                    f"DVD hints: {hints['title_count']} titles, "
+                    f"longest ~{hints['estimated_runtime_min']} min"
+                )
+        except Exception as e:
+            self.logger.debug(f"Could not get DVD hints: {e}")
+        return hints
     
     def extract_title_from_volume(self, volume_name: str) -> str:
         """
@@ -127,8 +261,8 @@ class DiscMonitor:
     def process_disc(self, volume_name: str):
         """
         Process a newly detected disc.
-        If app_state is available, enqueues a job for the worker thread.
-        Otherwise, falls back to direct ripping (standalone mode).
+        Detects disc type (DVD/Blu-ray/Audio CD), collects disc hints,
+        and enqueues a job (or falls back to direct ripping).
         
         Args:
             volume_name: Name of the volume
@@ -138,29 +272,48 @@ class DiscMonitor:
         self.logger.info(f"Processing new disc: {volume_name}")
         send_notification("Disc Detected", f"Found: {volume_name}")
         
+        disc_type = self.get_disc_type(volume_path)
         title_guess = self.extract_title_from_volume(volume_name)
+        self.logger.info(f"Disc type: {disc_type}, title guess: {title_guess}")
+
+        # Collect disc hints for better metadata matching
+        disc_hints = {'disc_type': disc_type}
+        if disc_type == 'audio_cd':
+            disc_hints.update(self.get_audio_cd_info(volume_path))
+        elif disc_type in ('dvd', 'bluray'):
+            disc_hints.update(self.get_dvd_disc_hints(volume_path))
         
         # If we have app_state, use the job queue
         if self.app_state:
             job_id = self.app_state.create_job(
                 title=title_guess,
                 source_path=str(volume_path),
-                title_number=1
+                title_number=1,
+                disc_type=disc_type,
+                disc_hints=disc_hints
             )
-            self.logger.info(f"Enqueued rip job {job_id} for: {volume_name}")
+            self.logger.info(f"Enqueued rip job {job_id} for: {volume_name} ({disc_type})")
             self.app_state.broadcast('disc_detected', {
                 'volume_name': volume_name,
-                'job_id': job_id
+                'job_id': job_id,
+                'disc_type': disc_type
             })
             return
         
         # Fallback: direct ripping (standalone mode)
         try:
-            self.logger.info(f"Starting direct rip for: {volume_name}")
-            output_file = self.ripper.rip_disc(
-                source_path=str(volume_path),
-                title_name=title_guess
-            )
+            self.logger.info(f"Starting direct rip for: {volume_name} ({disc_type})")
+
+            if disc_type == 'audio_cd':
+                output_file = self.ripper.rip_audio_cd(
+                    source_path=str(volume_path),
+                    album_name=title_guess
+                )
+            else:
+                output_file = self.ripper.rip_disc(
+                    source_path=str(volume_path),
+                    title_name=title_guess
+                )
             
             if output_file:
                 self.logger.info(f"Rip successful: {output_file}")
@@ -169,7 +322,8 @@ class DiscMonitor:
                     self.logger.info("Extracting metadata...")
                     metadata = self.metadata_extractor.extract_full_metadata(
                         output_file,
-                        title_hint=title_guess
+                        title_hint=title_guess,
+                        disc_hints=disc_hints
                     )
                     self.metadata_extractor.save_metadata(metadata, title_guess)
                     self.logger.info("Metadata extraction complete")
