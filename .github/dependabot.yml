@@ -1,0 +1,76 @@
+version: 2
+updates:
+  # ── Python (pip) ────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    reviewers:
+      - "poppemacmini"
+    commit-message:
+      prefix: "deps(pip):"
+    groups:
+      # Group minor/patch updates to reduce PR noise
+      pip-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      pip-dev:
+        patterns:
+          - "pytest*"
+          - "black"
+          - "flake8"
+          - "mypy"
+          - "isort"
+          - "bandit"
+          - "pytest-cov"
+          - "pytest-mock"
+    # Security updates get their own PRs immediately
+    security-updates:
+      interval: daily
+
+  # ── Docker ──────────────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    reviewers:
+      - "poppemacmini"
+    commit-message:
+      prefix: "deps(docker):"
+
+  # ── GitHub Actions ──────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    reviewers:
+      - "poppemacmini"
+    commit-message:
+      prefix: "deps(actions):"
+    groups:
+      actions-all:
+        update-types:
+          - "minor"
+          - "patch"
