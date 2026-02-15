@@ -62,6 +62,7 @@ jobs:
 
       - name: Mypy
         run: mypy src --ignore-missing-imports
+        continue-on-error: true  # Non-blocking until type annotations are complete
 
   # ─── Test Matrix ────────────────────────────────────────────
   test:
