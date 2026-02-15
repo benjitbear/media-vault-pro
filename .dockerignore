@@ -1,0 +1,51 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist
+build
+*.egg
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Testing & coverage
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+
+# Logs (container generates its own)
+logs/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed at runtime)
+docs/
+LICENSE
+README.md
+CHANGELOG.md
+Makefile
+
+# Tests (not needed at runtime)
+tests/
+
+# Dev config
+.env.example
+scripts/

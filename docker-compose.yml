@@ -1,0 +1,27 @@
+services:
+  medialibrary:
+    build: .
+    container_name: medialibrary
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    env_file:
+      - .env
+    environment:
+      - MEDIA_ROOT=/media
+      - SECURE_COOKIES=${SECURE_COOKIES:-false}
+    volumes:
+      # Media library (movies, TV, music, podcasts, downloads, etc.)
+      - ${MEDIA_ROOT:-/Users/poppemacmini/Media}:/media
+      # Persistent data (database, metadata cache)
+      - medialibrary-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  medialibrary-data:
+    driver: local
