@@ -8,381 +8,324 @@
     <script>tailwind.config = { darkMode: 'class' }</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
     <style>
-        .fade-in { animation: fadeIn 0.3s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        * { scrollbar-width: thin; scrollbar-color: #4b5563 transparent; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .fade-in { animation: fadeIn 0.25s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse-bar { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         .status-pulse { animation: pulse-bar 2s ease-in-out infinite; }
+        .type-badge { font-size: 0.6rem; letter-spacing: 0.05em; }
+        .progress-thumb { position: absolute; bottom: 0; left: 0; height: 3px; background: #1db954; border-radius: 0 0 0 3px; transition: width 0.3s; }
         .drop-zone { border: 2px dashed transparent; transition: all 0.3s; }
-        .drop-zone.dragover { border-color: #6366f1; background: rgba(99,102,241,0.08); }
-        .type-badge { font-size: 0.65rem; letter-spacing: 0.05em; }
-        .progress-thumb { position: absolute; bottom: 0; left: 0; height: 3px; background: #6366f1; transition: width 0.3s; }
+        .drop-zone.dragover { border-color: #1db954; background: rgba(29,185,84,0.08); }
+        .sidebar-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #b3b3b3; transition: color 0.15s; cursor: pointer; }
+        .sidebar-link:hover { color: #fff; }
+        .sidebar-link.active { color: #fff; }
+        .pill { padding: 0.375rem 0.875rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .pill-inactive { background: rgba(255,255,255,0.07); color: #b3b3b3; }
+        .pill-inactive:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .pill-active { background: #fff; color: #000; }
+        .player-btn { color: #b3b3b3; transition: color 0.15s, transform 0.1s; cursor: pointer; background: none; border: none; padding: 4px; }
+        .player-btn:hover { color: #fff; transform: scale(1.05); }
+        .player-btn.active-green { color: #1db954; }
+        .player-btn-main { color: #000; background: #fff; border-radius: 50%; width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; transition: transform 0.1s; cursor: pointer; border: none; }
+        .player-btn-main:hover { transform: scale(1.06); }
+        .progress-bar-wrap { position: relative; height: 4px; background: #4b5563; border-radius: 2px; cursor: pointer; flex: 1; }
+        .progress-bar-wrap:hover { height: 6px; }
+        .progress-fill { height: 100%; background: #fff; border-radius: 2px; transition: width 0.1s linear; position: relative; }
+        .progress-bar-wrap:hover .progress-fill { background: #1db954; }
+        .progress-knob { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; background: #fff; border-radius: 50%; opacity: 0; transition: opacity 0.15s; }
+        .progress-bar-wrap:hover .progress-knob { opacity: 1; }
+        .vol-bar { width: 93px; }
+        .media-card { background: rgba(255,255,255,0.05); border-radius: 0.5rem; padding: 1rem; cursor: pointer; transition: background 0.2s; }
+        .media-card:hover { background: rgba(255,255,255,0.1); }
+        .track-row { display: grid; grid-template-columns: 1.5rem 6fr 4fr 3fr minmax(40px, 1fr); gap: 1rem; align-items: center; padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; }
+        .track-row:hover { background: rgba(255,255,255,0.1); }
+        .track-row:hover .track-num { display: none; }
+        .track-row:hover .track-play { display: block; }
+        .track-play { display: none; }
+        .lib-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s; }
+        .lib-item:hover { background: rgba(255,255,255,0.1); }
+        .lib-item.active { background: rgba(255,255,255,0.1); }
+        .section-heading { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.25rem; }
     </style>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen transition-colors duration-300">
+<body class="bg-black text-white overflow-hidden select-none">
+
+<!-- App Shell: sidebar | main | player -->
+<div class="flex flex-col h-screen">
 
     <!-- Status Bar (active rip) -->
-    <div id="status-bar" class="hidden fixed top-0 left-0 right-0 bg-indigo-600 text-white px-4 py-2 z-50 status-pulse">
-        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm">
+    <div id="status-bar" class="hidden fixed top-0 left-0 right-0 bg-green-600 text-white px-4 py-1.5 z-[100] status-pulse">
+        <div class="flex items-center justify-between text-xs">
             <span>🔄 <span id="status-title">Encoding...</span></span>
             <div class="flex items-center gap-3">
                 <span id="status-eta" class="opacity-80"></span>
-                <div class="w-32 bg-indigo-800 rounded-full h-2">
-                    <div id="status-progress-bar" class="bg-white rounded-full h-2 transition-all duration-300" style="width:0%"></div>
+                <div class="w-32 bg-green-800 rounded-full h-1.5">
+                    <div id="status-progress-bar" class="bg-white rounded-full h-1.5 transition-all duration-300" style="width:0%"></div>
                 </div>
-                <span id="status-percent" class="font-mono w-14 text-right">0%</span>
+                <span id="status-percent" class="font-mono w-12 text-right">0%</span>
             </div>
         </div>
     </div>
 
     <!-- Reconnection indicator -->
-    <div id="ws-status" class="hidden fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-1 text-xs z-[60]">
+    <div id="ws-status" class="hidden fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-1 text-xs z-[110]">
         ⚠️ Reconnecting to server...
     </div>
 
-    <!-- Header -->
-    <div class="p-5 pb-0">
-        <div class="text-center py-10 px-5 bg-gradient-to-br from-indigo-500 to-purple-700 rounded-xl mb-8 text-white">
-            <h1 class="text-4xl font-bold mb-2">🎬 {{ library_name }}</h1>
-            <p id="library-count" class="opacity-90">Loading library...</p>
-            <div class="flex flex-wrap justify-center gap-2 mt-6">
-                <button id="btn-library" onclick="showTab('library')"
-                    class="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition text-sm font-medium">
-                    📚 Library
-                </button>
-                <button id="btn-jobs" onclick="showTab('jobs')"
-                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
-                    ⚙️ Jobs
-                </button>
-                <button id="btn-collections" onclick="showTab('collections')"
-                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
-                    📁 Collections
-                </button>
-                <button id="btn-podcasts" onclick="showTab('podcasts')"
-                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
-                    🎙️ Podcasts
-                </button>
-                <button id="btn-add" onclick="showTab('add')"
-                    class="px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm font-medium">
-                    ➕ Add Content
-                </button>
-                <button onclick="toggleDarkMode()"
-                    class="px-3 py-2 rounded-lg hover:bg-white/30 transition text-sm" title="Toggle dark mode">
-                    <span id="dark-mode-icon">☀️</span>
-                </button>
-                {% if auth_enabled %}
-                <a href="/logout"
-                    class="px-3 py-2 rounded-lg hover:bg-white/30 transition text-sm" title="Logout">🔓</a>
-                {% endif %}
+    <!-- Top row: sidebar + main -->
+    <div class="flex flex-1 min-h-0 gap-2 p-2 pb-0">
+
+        <!-- ═══════════════════ LEFT SIDEBAR ═══════════════════ -->
+        <aside id="sidebar" class="flex flex-col w-[280px] flex-shrink-0 gap-2">
+            <!-- Nav section -->
+            <div class="bg-[#121212] rounded-lg p-4 space-y-1">
+                <div class="flex items-center gap-2 px-1 mb-4 cursor-pointer" onclick="navigateTo('home')">
+                    <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                        <span class="text-black text-lg font-bold">▶</span>
+                    </div>
+                    <span class="font-bold text-base truncate">{{ library_name }}</span>
+                </div>
+                <div class="sidebar-link active" data-nav="home" onclick="navigateTo('home')">
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M12.5 3.247a1 1 0 0 0-1 0L4 7.577V20h4.5v-6a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v6H20V7.577l-7.5-4.33zm-2-1.732a3 3 0 0 1 3 0l7.5 4.33a2 2 0 0 1 1 1.732V21a1 1 0 0 1-1 1h-6.5a1 1 0 0 1-1-1v-6h-3v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.577a2 2 0 0 1 1-1.732l7.5-4.33z"/></svg>
+                    Home
+                </div>
+                <div class="sidebar-link" data-nav="search" onclick="navigateTo('search')">
+                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.28-9.407-9.28zm-7.407 9.28c0-4.006 3.302-7.28 7.407-7.28s7.407 3.274 7.407 7.28-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.28z"/></svg>
+                    Search
+                </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Search -->
-    <div id="search-container" class="max-w-xl mx-auto mb-8 px-5">
-        <input type="text" id="search" placeholder="🔍 Search movies, directors, actors, genres..."
-               onkeyup="searchLibrary()"
-               class="w-full py-4 px-5 border-none rounded-full bg-white dark:bg-gray-800
-                      text-gray-900 dark:text-white placeholder-gray-400
-                      focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
-    </div>
-
-    <!-- Library Tab -->
-    <div id="tab-library" class="max-w-7xl mx-auto px-5 pb-12">
-        <div id="media-grid" class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5">
-            <div class="text-center py-24 col-span-full opacity-50">Loading your library...</div>
-        </div>
-    </div>
-
-    <!-- Jobs Tab -->
-    <div id="tab-jobs" class="hidden max-w-5xl mx-auto px-5 pb-12">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-bold">Rip Jobs</h2>
-            <div class="flex gap-2">
-                <button onclick="rescanLibrary()"
-                    class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition text-sm">
-                    🔄 Rescan Library
-                </button>
-                <button onclick="showRipForm()"
-                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium">
-                    + Rip a Disc
-                </button>
+            <!-- Browse section -->
+            <div class="bg-[#121212] rounded-lg p-4 space-y-0.5">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400 px-1 mb-2">Browse</div>
+                <div class="sidebar-link" data-browse="audio" onclick="browseType('audio')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6zM10 19a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+                    Music
+                </div>
+                <div class="sidebar-link" data-browse="video" onclick="browseType('video')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4zm0 2h16v12H4V6zm6 2.5v7l5.5-3.5L10 8.5z"/></svg>
+                    Movies
+                </div>
+                <div class="sidebar-link" data-browse="podcast" onclick="browseType('podcast')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 7a5 5 0 0 0-10 0v4a5 5 0 0 0 10 0V7zM12 4a3 3 0 0 1 3 3v4a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3zm-1 15.93A8.001 8.001 0 0 1 4 12h2a6 6 0 0 0 12 0h2a8.001 8.001 0 0 1-7 7.93V22h-2v-2.07z"/></svg>
+                    Podcasts
+                </div>
+                <div class="sidebar-link" data-browse="document" onclick="browseType('document')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 4h7l5 5v11H6V4zm2 8v2h8v-2H8zm0 4v2h5v-2H8z"/></svg>
+                    Documents
+                </div>
+                <div class="sidebar-link" data-browse="image" onclick="browseType('image')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM3 5h18v14H3V5zm4 3.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM3 19l5-6 3 3 4-5 6 8H3z"/></svg>
+                    Images
+                </div>
             </div>
-        </div>
-        <div id="jobs-list" class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm">
-            <p class="text-center py-12 opacity-50">Loading jobs...</p>
-        </div>
-    </div>
 
-    <!-- Collections Tab -->
-    <div id="tab-collections" class="hidden max-w-7xl mx-auto px-5 pb-12">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-bold">Collections</h2>
-        </div>
-        <div id="collections-list">
-            <p class="text-center py-12 opacity-50">Loading collections...</p>
-        </div>
-    </div>
-
-    <!-- Podcasts Tab -->
-    <div id="tab-podcasts" class="hidden max-w-5xl mx-auto px-5 pb-12">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-bold">Podcasts</h2>
-            <button onclick="showSubscribeModal()"
-                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition text-sm font-medium">
-                + Subscribe
-            </button>
-        </div>
-        <div id="podcasts-list">
-            <p class="text-center py-12 opacity-50">Loading podcasts...</p>
-        </div>
-    </div>
-
-    <!-- Add Content Tab -->
-    <div id="tab-add" class="hidden max-w-3xl mx-auto px-5 pb-12">
-        <h2 class="text-2xl font-bold mb-6">Add Content</h2>
-
-        <!-- Upload Section -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
-            <h3 class="text-lg font-semibold mb-3">📤 Upload Files</h3>
-            <div id="drop-zone" class="drop-zone rounded-xl p-12 text-center bg-gray-50 dark:bg-gray-700/50 cursor-pointer"
-                 onclick="document.getElementById('file-input').click()">
-                <div class="text-5xl mb-3">📁</div>
-                <p class="font-medium mb-1">Drag &amp; drop files here</p>
-                <p class="text-sm opacity-60">or click to browse &mdash; any file type accepted</p>
-                <input id="file-input" type="file" multiple class="hidden" onchange="handleFileSelect(event)">
+            <!-- Your Library -->
+            <div class="bg-[#121212] rounded-lg flex-1 flex flex-col min-h-0">
+                <div class="flex items-center justify-between p-4 pb-2">
+                    <div class="flex items-center gap-2 cursor-pointer group" onclick="navigateTo('home')">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" class="text-gray-400 group-hover:text-white"><path d="M3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zm5 0a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zm5.5 0a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1z"/></svg>
+                        <span class="text-sm font-bold text-gray-400 group-hover:text-white">Your Library</span>
+                    </div>
+                    <button onclick="navigateTo('add')" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#2a2a2a] text-gray-400 hover:text-white transition" title="Add content">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.25 8a.75.75 0 0 1-.75.75H8.75v5.75a.75.75 0 0 1-1.5 0V8.75H1.5a.75.75 0 0 1 0-1.5h5.75V1.5a.75.75 0 0 1 1.5 0v5.75h5.75a.75.75 0 0 1 .75.75z"/></svg>
+                    </button>
+                </div>
+                <div class="flex gap-2 px-4 pb-2 overflow-x-auto" id="lib-pills">
+                    <span class="pill pill-active" data-lib-filter="all" onclick="filterSidebar('all')">All</span>
+                    <span class="pill pill-inactive" data-lib-filter="albums" onclick="filterSidebar('albums')">Albums</span>
+                    <span class="pill pill-inactive" data-lib-filter="artists" onclick="filterSidebar('artists')">Artists</span>
+                    <span class="pill pill-inactive" data-lib-filter="movies" onclick="filterSidebar('movies')">Movies</span>
+                    <span class="pill pill-inactive" data-lib-filter="podcasts" onclick="filterSidebar('podcasts')">Podcasts</span>
+                </div>
+                <div id="sidebar-library" class="flex-1 overflow-y-auto px-2 pb-2">
+                    <div class="text-sm text-gray-500 px-2 py-4">Loading...</div>
+                </div>
             </div>
-            <div id="upload-progress" class="hidden mt-4">
+        </aside>
+
+        <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+        <main id="main-content" class="flex-1 bg-[#121212] rounded-lg overflow-y-auto min-h-0">
+            <!-- Top bar -->
+            <div class="sticky top-0 z-40 flex items-center justify-between px-6 py-3 bg-[#121212]/95 backdrop-blur-sm">
                 <div class="flex items-center gap-3">
-                    <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div id="upload-bar" class="bg-indigo-500 rounded-full h-2 transition-all" style="width:0%"></div>
+                    <button onclick="historyBack()" class="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.03 3.97a.75.75 0 0 1 0 1.06L7.56 8.5l3.47 3.47a.75.75 0 1 1-1.06 1.06l-4-4a.75.75 0 0 1 0-1.06l4-4a.75.75 0 0 1 1.06 0z"/></svg>
+                    </button>
+                    <button onclick="historyForward()" class="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4.97 12.03a.75.75 0 0 1 0-1.06L8.44 7.5 4.97 4.03a.75.75 0 0 1 1.06-1.06l4 4a.75.75 0 0 1 0 1.06l-4 4a.75.75 0 0 1-1.06 0z"/></svg>
+                    </button>
+                </div>
+                <div class="flex-1 max-w-md mx-4">
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7 1.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5zM.25 7a6.75 6.75 0 1 1 12.096 4.12l3.517 3.516a.75.75 0 1 1-1.06 1.06l-3.516-3.515A6.75 6.75 0 0 1 .25 7z"/></svg>
+                        <input id="search-input" type="text" placeholder="What do you want to play?"
+                            oninput="onSearchInput(this.value)"
+                            class="w-full pl-10 pr-4 py-2 rounded-full bg-[#2a2a2a] text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/30 border border-transparent hover:border-[#3a3a3a]">
                     </div>
-                    <span id="upload-status" class="text-sm">Uploading...</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if auth_enabled %}
+                    <a href="/logout" class="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition text-sm" title="Logout">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zm0 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zm0 1.5a2.5 2.5 0 0 1 0 5 2.5 2.5 0 0 1 0-5zm0 6.5c2.5 0 4.5 1 4.5 2.5v.5h-9v-.5C3.5 11 5.5 10 8 10z"/></svg>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Dynamic view container -->
+            <div id="view-container" class="px-6 pb-8"></div>
+        </main>
+    </div>
+
+    <!-- ═══════════════════ BOTTOM PLAYER BAR ═══════════════════ -->
+    <footer id="player-bar" class="h-[72px] bg-[#181818] border-t border-[#282828] flex items-center px-4 gap-4 flex-shrink-0">
+        <!-- Left: Now playing -->
+        <div class="flex items-center gap-3 w-[280px] min-w-[180px]">
+            <div id="player-art" class="w-14 h-14 rounded bg-[#282828] flex items-center justify-center text-2xl overflow-hidden flex-shrink-0">
+                <span class="text-gray-600">♪</span>
+            </div>
+            <div class="min-w-0">
+                <div id="player-title" class="text-sm font-medium truncate text-gray-400 cursor-pointer hover:underline" onclick="scrollToNowPlaying()">Not playing</div>
+                <div id="player-artist" class="text-xs text-gray-500 truncate"></div>
+            </div>
+        </div>
+
+        <!-- Center: Controls + progress -->
+        <div class="flex-1 flex flex-col items-center gap-1 max-w-[722px]">
+            <div class="flex items-center gap-4">
+                <button id="btn-shuffle" onclick="toggleShuffle()" class="player-btn" title="Shuffle">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.151.922a.75.75 0 1 0-1.06 1.06L13.109 3H11.16a3.75 3.75 0 0 0-2.873 1.34l-6.173 7.356A2.25 2.25 0 0 1 .39 12.5H0V14h.391a3.75 3.75 0 0 0 2.873-1.34l6.173-7.356A2.25 2.25 0 0 1 11.16 4.5h1.95l-1.018 1.018a.75.75 0 0 0 1.06 1.06l2.06-2.06a.78.78 0 0 0 0-1.06l-2.06-2.06zM9.553 9.96l1.607 1.915A2.25 2.25 0 0 0 12.84 12.5h1.95l-1.017-1.018a.75.75 0 0 1 1.06-1.06l2.06 2.06a.78.78 0 0 1 0 1.06l-2.06 2.06a.75.75 0 1 1-1.06-1.06L14.79 13.5h-1.95a3.75 3.75 0 0 1-2.873-1.34L8.36 10.14l1.192-1.18zM.39 3.5H0V2h.391a3.75 3.75 0 0 1 2.873 1.34L4.89 5.277 3.7 6.457 2.114 4.696A2.25 2.25 0 0 0 .39 3.5z"/></svg>
+                </button>
+                <button id="btn-prev" onclick="playerPrev()" class="player-btn" title="Previous">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.15v5.15a.7.7 0 0 1-1.4 0V1.7a.7.7 0 0 1 .7-.7z"/></svg>
+                </button>
+                <button id="btn-play" onclick="playerToggle()" class="player-btn-main" title="Play">
+                    <svg id="icon-play" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z"/></svg>
+                    <svg id="icon-pause" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="hidden"><path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z"/></svg>
+                </button>
+                <button id="btn-next" onclick="playerNext()" class="player-btn" title="Next">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.15v5.15a.7.7 0 0 0 1.4 0V1.7a.7.7 0 0 0-.7-.7z"/></svg>
+                </button>
+                <button id="btn-repeat" onclick="toggleRepeat()" class="player-btn" title="Repeat">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06l-2.06-2.06a.78.78 0 0 1 0-1.06l2.06-2.06a.75.75 0 1 1 1.06 1.06L9.81 12.5h2.44a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 5.25v5A2.25 2.25 0 0 0 3.75 12.5h1.5V14h-1.5A3.75 3.75 0 0 1 0 10.25v-5z"/></svg>
+                </button>
+            </div>
+            <div class="flex items-center gap-2 w-full">
+                <span id="player-time-current" class="text-[11px] text-gray-400 w-10 text-right font-mono">0:00</span>
+                <div id="player-progress" class="progress-bar-wrap" onclick="seekPlayer(event)">
+                    <div id="player-progress-fill" class="progress-fill" style="width: 0%">
+                        <div class="progress-knob"></div>
+                    </div>
+                </div>
+                <span id="player-time-total" class="text-[11px] text-gray-400 w-10 font-mono">0:00</span>
+            </div>
+        </div>
+
+        <!-- Right: Queue, volume -->
+        <div class="flex items-center gap-3 w-[280px] justify-end">
+            <button onclick="toggleQueuePanel()" class="player-btn" title="Queue">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z"/></svg>
+            </button>
+            <div class="flex items-center gap-1">
+                <button onclick="toggleMute()" class="player-btn" title="Volume">
+                    <svg id="vol-icon" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.642 3.642 0 0 1-1.33-4.967 3.639 3.639 0 0 1 1.33-1.333l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.139 2.139 0 0 0 0 3.7l5.8 3.35V2.8l-5.8 3.35zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88z"/></svg>
+                </button>
+                <div id="vol-bar" class="progress-bar-wrap vol-bar" onclick="setVolume(event)">
+                    <div id="vol-fill" class="progress-fill" style="width: 70%">
+                        <div class="progress-knob"></div>
+                    </div>
                 </div>
             </div>
         </div>
+    </footer>
+</div>
 
-        <!-- Download Video -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
-            <h3 class="text-lg font-semibold mb-3">🎥 Download Video</h3>
-            <p class="text-sm opacity-60 mb-3">YouTube, Vimeo, or any yt-dlp supported URL</p>
-            <div class="flex gap-2">
-                <input id="video-url" placeholder="https://youtube.com/watch?v=..."
-                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <button onclick="submitVideoDownload()"
-                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
-                    Download
-                </button>
+<!-- ═══════════════════ MODALS ═══════════════════ -->
+
+<!-- Media Detail Modal -->
+<div id="modal" class="hidden fixed inset-0 bg-black/90 z-[1000] overflow-y-auto" onclick="closeModal()">
+    <div class="max-w-5xl mx-auto mt-6 mb-6 px-4" onclick="event.stopPropagation()">
+        <div class="flex justify-end mb-2">
+            <button onclick="closeModal()" class="text-white text-3xl hover:opacity-70 leading-none">&times;</button>
+        </div>
+        <div class="bg-[#181818] rounded-xl overflow-hidden shadow-2xl">
+            <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls preload="metadata"></video>
+            <audio id="modal-audio" class="hidden w-full" controls preload="metadata"></audio>
+            <div class="p-6">
+                <div id="modal-info" class="text-white"></div>
+                <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-[#282828]">
+                    <button onclick="downloadMedia()" class="px-4 py-2 bg-[#282828] rounded-lg hover:bg-[#3a3a3a] transition text-sm">⬇️ Download</button>
+                    <button onclick="openEditModal()" class="px-4 py-2 bg-[#282828] rounded-lg hover:bg-[#3a3a3a] transition text-sm">✏️ Edit Metadata</button>
+                    <button onclick="addToCollection()" class="px-4 py-2 bg-[#282828] rounded-lg hover:bg-[#3a3a3a] transition text-sm">📁 Add to Collection</button>
+                    <button id="btn-restart" onclick="restartMedia()" class="hidden px-4 py-2 bg-[#282828] rounded-lg hover:bg-[#3a3a3a] transition text-sm">⏮️ Start Over</button>
+                    <button onclick="deleteMedia()" class="px-4 py-2 bg-red-900/50 rounded-lg hover:bg-red-900/80 transition text-sm text-red-300">🗑️ Delete</button>
+                </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- Archive Article -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
-            <h3 class="text-lg font-semibold mb-3">📰 Archive Article</h3>
-            <p class="text-sm opacity-60 mb-3">Save a web article for permanent offline reading</p>
-            <div class="flex gap-2">
-                <input id="article-url" placeholder="https://example.com/interesting-article"
-                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <button onclick="submitArticle()"
-                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
-                    Archive
-                </button>
-            </div>
-        </div>
-
-        <!-- Add Book -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-sm">
-            <h3 class="text-lg font-semibold mb-3">📖 Catalogue a Book</h3>
+<!-- Edit Metadata Modal -->
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeEditModal()">
+    <div class="bg-[#282828] rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onclick="event.stopPropagation()">
+        <h3 class="text-xl font-bold mb-4">Edit Metadata</h3>
+        <div class="space-y-3">
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Title</label><input id="edit-title" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
             <div class="grid grid-cols-2 gap-3">
-                <input id="book-title" placeholder="Book title *"
-                       class="col-span-2 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <input id="book-author" placeholder="Author"
-                       class="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <input id="book-year" placeholder="Year"
-                       class="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <textarea id="book-desc" placeholder="Description (optional)" rows="2"
-                          class="col-span-2 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                <div><label class="block text-sm font-medium mb-1 opacity-70">Year</label><input id="edit-year" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+                <div><label class="block text-sm font-medium mb-1 opacity-70">Rating (0-10)</label><input id="edit-rating" type="number" step="0.1" min="0" max="10" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
             </div>
-            <div class="flex justify-end mt-3">
-                <button onclick="submitBook()"
-                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium">
-                    Add Book
-                </button>
-            </div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Artist / Author</label><input id="edit-artist" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Director</label><input id="edit-director" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Album</label><input id="edit-album" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Genres (comma-separated)</label><input id="edit-genres" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Cast (comma-separated)</label><input id="edit-cast" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Overview</label><textarea id="edit-overview" rows="4" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white resize-none focus:ring-2 focus:ring-green-500 focus:outline-none"></textarea></div>
         </div>
-
-        <!-- Import Playlist -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
-            <h3 class="text-lg font-semibold mb-3">🎵 Import Playlist</h3>
-            <p class="text-sm opacity-60 mb-3">YouTube or Spotify playlist URL</p>
-            <div class="flex gap-2">
-                <input id="playlist-url" placeholder="https://open.spotify.com/playlist/..."
-                       class="flex-1 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                <button onclick="submitPlaylist()"
-                    class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium whitespace-nowrap">
-                    Import
-                </button>
-            </div>
+        <div class="flex justify-end gap-3 mt-6">
+            <button onclick="closeEditModal()" class="px-4 py-2 rounded-lg bg-[#3a3a3a] hover:bg-[#4a4a4a] transition">Cancel</button>
+            <button onclick="saveMetadata()" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white transition font-medium">Save Changes</button>
         </div>
     </div>
+</div>
 
-    <!-- Media Detail Modal -->
-    <div id="modal" class="hidden fixed inset-0 bg-black/90 z-[1000] overflow-y-auto" onclick="closeModal()">
-        <div class="max-w-5xl mx-auto mt-6 mb-6 px-4" onclick="event.stopPropagation()">
-            <div class="flex justify-end mb-2">
-                <button onclick="closeModal()" class="text-white text-3xl hover:opacity-70 leading-none">&times;</button>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-2xl">
-                <video id="modal-video" class="w-full bg-black max-h-[60vh]" controls preload="metadata"></video>
-                <audio id="modal-audio" class="hidden w-full" controls preload="metadata"></audio>
-                <div class="p-6">
-                    <div id="modal-info" class="text-gray-900 dark:text-white"></div>
-                    <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <button onclick="downloadMedia()"
-                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
-                            ⬇️ Download
-                        </button>
-                        <button onclick="openEditModal()"
-                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
-                            ✏️ Edit Metadata
-                        </button>
-                        <button onclick="addToCollection()"
-                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
-                            📁 Add to Collection
-                        </button>
-                        <button id="btn-restart" onclick="restartMedia()" class="hidden
-                            px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">
-                            ⏮️ Start Over
-                        </button>
-                    </div>
-                    <!-- Queue nav (visible when playing from collection) -->
-                    <div id="queue-nav" class="hidden flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <button onclick="queuePrev()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">⏮ Previous</button>
-                        <span id="queue-position" class="text-sm opacity-60"></span>
-                        <button onclick="queueNext()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">Next ⏭</button>
-                    </div>
-                    </div>
-                </div>
-            </div>
+<!-- Rip Disc Modal -->
+<div id="rip-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeRipModal()">
+    <div class="bg-[#282828] rounded-xl p-6 w-full max-w-lg shadow-2xl" onclick="event.stopPropagation()">
+        <h3 class="text-xl font-bold mb-4">Rip a Disc</h3>
+        <div class="space-y-3">
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Source Path *</label><input id="rip-source" placeholder="/Volumes/MY_DVD" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Title (optional)</label><input id="rip-title" placeholder="Movie Name" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Title Number</label><input id="rip-title-num" type="number" value="1" min="1" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+            <button onclick="closeRipModal()" class="px-4 py-2 rounded-lg bg-[#3a3a3a] hover:bg-[#4a4a4a] transition">Cancel</button>
+            <button onclick="submitRipJob()" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white transition font-medium">Start Ripping</button>
         </div>
     </div>
+</div>
 
-    <!-- Edit Metadata Modal -->
-    <div id="edit-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeEditModal()">
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
-             onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-4">Edit Metadata</h3>
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Title</label>
-                    <input id="edit-title" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium mb-1 opacity-70">Year</label>
-                        <input id="edit-year" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1 opacity-70">Rating (0-10)</label>
-                        <input id="edit-rating" type="number" step="0.1" min="0" max="10"
-                               class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Director</label>
-                    <input id="edit-director" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Genres (comma-separated)</label>
-                    <input id="edit-genres" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Cast (comma-separated)</label>
-                    <input id="edit-cast" class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Overview</label>
-                    <textarea id="edit-overview" rows="4"
-                              class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeEditModal()"
-                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-                    Cancel
-                </button>
-                <button onclick="saveMetadata()"
-                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
-                    Save Changes
-                </button>
-            </div>
+<!-- Subscribe to Podcast Modal -->
+<div id="subscribe-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeSubscribeModal()">
+    <div class="bg-[#282828] rounded-xl p-6 w-full max-w-lg shadow-2xl" onclick="event.stopPropagation()">
+        <h3 class="text-xl font-bold mb-4">Subscribe to Podcast</h3>
+        <div class="space-y-3">
+            <div><label class="block text-sm font-medium mb-1 opacity-70">RSS Feed URL *</label><input id="podcast-feed-url" placeholder="https://example.com/feed.xml" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+            <div><label class="block text-sm font-medium mb-1 opacity-70">Title (optional)</label><input id="podcast-title" placeholder="Podcast Name" class="w-full p-2.5 rounded-lg bg-[#3a3a3a] border-none text-white focus:ring-2 focus:ring-green-500 focus:outline-none"></div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+            <button onclick="closeSubscribeModal()" class="px-4 py-2 rounded-lg bg-[#3a3a3a] hover:bg-[#4a4a4a] transition">Cancel</button>
+            <button onclick="submitPodcastSubscription()" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white transition font-medium">Subscribe</button>
         </div>
     </div>
+</div>
 
-    <!-- Rip Disc Modal -->
-    <div id="rip-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeRipModal()">
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg shadow-2xl"
-             onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-4">Rip a Disc</h3>
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Source Path *</label>
-                    <input id="rip-source" placeholder="/Volumes/MY_DVD"
-                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Title (optional, auto-detected from disc)</label>
-                    <input id="rip-title" placeholder="Movie Name"
-                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Title Number</label>
-                    <input id="rip-title-num" type="number" value="1" min="1"
-                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeRipModal()"
-                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-                    Cancel
-                </button>
-                <button onclick="submitRipJob()"
-                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
-                    Start Ripping
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Subscribe to Podcast Modal -->
-    <div id="subscribe-modal" class="hidden fixed inset-0 bg-black/80 z-[1001] flex items-center justify-center p-4" onclick="closeSubscribeModal()">
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg shadow-2xl"
-             onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-4">Subscribe to Podcast</h3>
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">RSS Feed URL *</label>
-                    <input id="podcast-feed-url" placeholder="https://example.com/feed.xml"
-                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 opacity-70">Title (optional, auto-detected)</label>
-                    <input id="podcast-title" placeholder="Podcast Name"
-                           class="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeSubscribeModal()"
-                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-                    Cancel
-                </button>
-                <button onclick="submitPodcastSubscription()"
-                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition font-medium">
-                    Subscribe
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

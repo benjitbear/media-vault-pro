@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..constants import AUDIO_EXTENSIONS
+from ..observability.errors import ErrorTracker
+from ..observability.metrics import MetricsCollector
+from ..observability.tracing import end_background_trace, trace_background_job
 from ..utils import (
-    get_data_dir,
     get_media_root,
     natural_sort_key,
     rename_with_metadata,
@@ -47,6 +49,8 @@ def job_worker(
     """
     logger.info("Job worker thread started")
     rename_ok = config.get("file_naming", {}).get("rename_after_rip", True)
+    metrics = MetricsCollector()
+    error_tracker = ErrorTracker()
 
     while True:
         try:
@@ -59,6 +63,11 @@ def job_worker(
             disc_type = job.get("disc_type", "dvd")
             disc_hints = json.loads(job.get("disc_hints", "{}"))
             job_type = job.get("job_type", "rip")
+
+            # Start a trace span for this job
+            trace_background_job(job_type, job_id)
+            metrics.inc("rip_jobs_created_total", labels={"type": disc_type})
+
             logger.info("Processing job %s: %s (%s/%s)", job_id, job["title"], disc_type, job_type)
 
             # Mark as encoding
@@ -143,6 +152,7 @@ def job_worker(
 
                 # Notify clients to refresh library
                 app_state.broadcast("library_updated", {})
+                metrics.inc("rip_jobs_completed_total", labels={"type": disc_type})
             else:
                 app_state.update_job_status(
                     job_id,
@@ -151,9 +161,18 @@ def job_worker(
                     completed_at=datetime.now().isoformat(),
                 )
                 logger.error("Job %s failed: no output", job_id)
+                metrics.inc("rip_jobs_failed_total", labels={"type": disc_type})
+
+            # End the trace span and record duration
+            duration_ms = end_background_trace()
+            if duration_ms is not None:
+                metrics.observe("job_duration_ms", duration_ms, labels={"job_type": job_type})
 
         except Exception as e:
             logger.error("Job worker error: %s", e)
+            error_tracker.capture_exception(extra={"worker": "job_worker"})
+            metrics.inc("rip_jobs_failed_total")
+            end_background_trace()
             try:
                 active = app_state.get_active_job()
                 if active:

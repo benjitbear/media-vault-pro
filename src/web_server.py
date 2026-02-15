@@ -4,39 +4,44 @@ Features: WebSocket (Socket.IO), auth, library caching, range requests,
 job management, collections, metadata editing, download, dark mode.
 """
 
-import json
 import os
 import re
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from flask import (
     Flask,
-    render_template,
-    jsonify,
-    request,
-    redirect,
     Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
 )
 from flask_socketio import SocketIO, emit
 
 from .app_state import AppState
 from .config import load_config
-from .services.library_scanner import LibraryScannerService
-from .utils import (
-    setup_logger,
-    configure_notifications,
+from .observability import (
+    ErrorTracker,
+    MetricsCollector,
+    PiiScrubber,
+    RequestTracer,
+    setup_structured_logger,
 )
 from .routes import (
-    media_bp,
-    jobs_bp,
     collections_bp,
-    users_bp,
     content_bp,
-    podcasts_bp,
+    jobs_bp,
+    media_bp,
+    observability_bp,
     playback_bp,
+    podcasts_bp,
+    users_bp,
+)
+from .services.library_scanner import LibraryScannerService
+from .utils import (
+    configure_notifications,
 )
 
 
@@ -60,7 +65,8 @@ class MediaServer:
         """
         self.config = config if config is not None else load_config(config_path or "config.json")
         debug_mode = self.config.get("logging", {}).get("debug", False)
-        self.logger = setup_logger("web_server", "web_server.log", debug=debug_mode)
+        self.logger = setup_structured_logger("web_server", "web_server.log", debug=debug_mode)
+        self.logger.addFilter(PiiScrubber())
         self.app_state = app_state or AppState()
 
         # Configure notification suppression from config
@@ -123,6 +129,14 @@ class MediaServer:
         self._setup_page_routes()
         self._register_blueprints()
         self._setup_socketio()
+
+        # ── Observability wiring ─────────────────────────────────
+        self.metrics = MetricsCollector()
+        self.error_tracker = ErrorTracker()
+        self.error_tracker.install_flask(self.app)
+        self.tracer = RequestTracer(
+            self.app, logger=self.logger, metrics=self.metrics
+        )
 
         self.logger.info("MediaServer initialized with WebSocket support")
 
@@ -334,6 +348,7 @@ class MediaServer:
             content_bp,
             podcasts_bp,
             playback_bp,
+            observability_bp,
         ):
             self.app.register_blueprint(bp)
 

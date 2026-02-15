@@ -96,6 +96,8 @@ STREAM_CHUNK_SIZE = 256 * 1024  # 256 KB — used for range-request streaming
 # ── Logging ──────────────────────────────────────────────────────
 LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB per log file
 LOG_BACKUP_COUNT = 5
+LOG_RETENTION_DAYS = 30  # how long to keep rotated logs
+LOG_JSON_INDENT = None  # None = compact single-line JSON (production)
 
 # ── Auth ─────────────────────────────────────────────────────────
 # Use pbkdf2 instead of scrypt — Python 3.9 + LibreSSL lacks hashlib.scrypt

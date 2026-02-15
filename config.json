@@ -43,7 +43,11 @@
   },
   "logging": {
     "debug": false,
-    "progress_indicator": false
+    "progress_indicator": false,
+    "structured": true,
+    "json_console": false,
+    "pii_scrubbing": true,
+    "log_retention_days": 30
   },
   "jellyfin": {
     "enabled": false,
