@@ -1,0 +1,202 @@
+# MediaLibrary — Monitoring Dashboard Specification
+#
+# This file defines panels for a Grafana-style dashboard.
+# Import into Grafana, or use it as a reference for any monitoring UI.
+# The built-in /api/metrics/json endpoint provides all data points.
+
+dashboard:
+  title: "MediaLibrary — System Overview"
+  refresh: "30s"
+  time_range: "last 6 hours"
+
+  rows:
+    # ════════════════════════════════════════════════════════════
+    # Row 1: Golden Signals at a Glance
+    # ════════════════════════════════════════════════════════════
+    - title: "Golden Signals"
+      panels:
+        - title: "Request Rate (req/s)"
+          type: graph
+          query: "rate(http_requests_total[5m])"
+          description: "Incoming HTTP request rate per second."
+          thresholds:
+            warning: 100
+            critical: 500
+
+        - title: "Error Rate (%)"
+          type: graph
+          query: >
+            sum(rate(http_errors_total[5m]))
+            / sum(rate(http_requests_total[5m])) * 100
+          description: "Percentage of requests resulting in 4xx/5xx."
+          thresholds:
+            warning: 1
+            critical: 5
+
+        - title: "p50 / p95 / p99 Latency (ms)"
+          type: graph
+          queries:
+            - label: "p50"
+              query: "histogram_quantile(0.50, rate(http_request_duration_ms_bucket[5m]))"
+            - label: "p95"
+              query: "histogram_quantile(0.95, rate(http_request_duration_ms_bucket[5m]))"
+            - label: "p99"
+              query: "histogram_quantile(0.99, rate(http_request_duration_ms_bucket[5m]))"
+          thresholds:
+            warning: 1000
+            critical: 3000
+
+        - title: "Active Jobs"
+          type: stat
+          query: "active_jobs"
+          description: "Number of currently running rip/download jobs."
+
+    # ════════════════════════════════════════════════════════════
+    # Row 2: Resource Utilisation (Saturation)
+    # ════════════════════════════════════════════════════════════
+    - title: "Resource Utilisation"
+      panels:
+        - title: "Disk Usage (%)"
+          type: gauge
+          query: "medialibrary_disk_used_percent"
+          thresholds:
+            ok: 0
+            warning: 80
+            critical: 95
+
+        - title: "Disk Free (GB)"
+          type: stat
+          query: "medialibrary_disk_free_gb"
+          thresholds:
+            critical: 1
+            warning: 5
+
+        - title: "Process Memory (MB)"
+          type: graph
+          query: "process_max_rss_bytes / 1024 / 1024"
+          thresholds:
+            warning: 512
+            critical: 1024
+
+        - title: "CPU Time (user + sys)"
+          type: graph
+          queries:
+            - label: "user"
+              query: "rate(process_cpu_user_seconds[5m])"
+            - label: "system"
+              query: "rate(process_cpu_system_seconds[5m])"
+
+    # ════════════════════════════════════════════════════════════
+    # Row 3: Business Metrics
+    # ════════════════════════════════════════════════════════════
+    - title: "Business Metrics"
+      panels:
+        - title: "Jobs Created (24h)"
+          type: stat
+          query: "increase(rip_jobs_created_total[24h])"
+
+        - title: "Jobs Completed (24h)"
+          type: stat
+          query: "increase(rip_jobs_completed_total[24h])"
+
+        - title: "Jobs Failed (24h)"
+          type: stat
+          query: "increase(rip_jobs_failed_total[24h])"
+
+        - title: "Library Size"
+          type: stat
+          query: "medialibrary_media_count"
+          description: "Total indexed media items."
+
+        - title: "Downloads Completed (24h)"
+          type: stat
+          query: "increase(content_downloads_completed_total[24h])"
+
+        - title: "Podcast Episodes Downloaded (24h)"
+          type: stat
+          query: "increase(podcast_episodes_downloaded_total[24h])"
+
+    # ════════════════════════════════════════════════════════════
+    # Row 4: Error Tracking
+    # ════════════════════════════════════════════════════════════
+    - title: "Error Tracking"
+      panels:
+        - title: "Unhandled Exceptions (1h)"
+          type: stat
+          query: "increase(captured_exceptions_total[1h])"
+          thresholds:
+            warning: 5
+            critical: 20
+
+        - title: "Top Error Types"
+          type: table
+          query: "topk(10, sum by (error_type)(captured_exceptions_total))"
+          description: "Most frequent exception classes."
+
+        - title: "Error Rate by Endpoint"
+          type: graph
+          query: "sum by (path)(rate(http_errors_total[5m]))"
+
+    # ════════════════════════════════════════════════════════════
+    # Row 5: Request Tracing
+    # ════════════════════════════════════════════════════════════
+    - title: "Request Tracing"
+      panels:
+        - title: "Request Volume by Endpoint"
+          type: graph
+          query: "sum by (path)(rate(http_requests_total[5m]))"
+
+        - title: "Latency by Endpoint (p95)"
+          type: graph
+          query: >
+            histogram_quantile(0.95,
+              sum by (path, le)(rate(http_request_duration_ms_bucket[5m]))
+            )
+
+        - title: "Slowest Endpoints (p99)"
+          type: table
+          query: >
+            topk(10,
+              histogram_quantile(0.99,
+                sum by (path, le)(rate(http_request_duration_ms_bucket[5m]))
+              )
+            )
+
+    # ════════════════════════════════════════════════════════════
+    # Row 6: Background Workers
+    # ════════════════════════════════════════════════════════════
+    - title: "Background Workers"
+      panels:
+        - title: "Job Queue Depth"
+          type: graph
+          query: "medialibrary_queued_jobs"
+
+        - title: "Job Processing Duration (avg, ms)"
+          type: graph
+          queries:
+            - label: "rip"
+              query: "rate(job_duration_ms_sum{job_type='rip'}[5m]) / rate(job_duration_ms_count{job_type='rip'}[5m])"
+            - label: "download"
+              query: "rate(job_duration_ms_sum{job_type='download'}[5m]) / rate(job_duration_ms_count{job_type='download'}[5m])"
+            - label: "podcast"
+              query: "rate(job_duration_ms_sum{job_type='podcast'}[5m]) / rate(job_duration_ms_count{job_type='podcast'}[5m])"
+
+        - title: "Worker Thread Status"
+          type: table
+          query: "medialibrary_worker_status"
+          description: "1 = running, 0 = stopped/crashed"
+
+    # ════════════════════════════════════════════════════════════
+    # Row 7: Logs
+    # ════════════════════════════════════════════════════════════
+    - title: "Logs"
+      panels:
+        - title: "Log Volume by Level"
+          type: graph
+          query: 'sum by (level)(count_over_time({service="medialibrary"} [5m]))'
+          description: "Loki/Grafana Logs panel — shows log lines per level."
+
+        - title: "Recent Errors"
+          type: logs
+          query: '{service="medialibrary"} |= "ERROR"'
+          description: "Live tail of ERROR-level log lines."

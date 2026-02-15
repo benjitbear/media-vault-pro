@@ -10,6 +10,7 @@ from .collections_bp import collections_bp
 from .content_bp import content_bp
 from .jobs_bp import jobs_bp
 from .media_bp import media_bp
+from .observability_bp import observability_bp
 from .playback_bp import playback_bp
 from .podcasts_bp import podcasts_bp
 from .users_bp import users_bp
@@ -22,4 +23,5 @@ __all__ = [
     "content_bp",
     "podcasts_bp",
     "playback_bp",
+    "observability_bp",
 ]

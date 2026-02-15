@@ -1,0 +1,181 @@
+# MediaLibrary — Alert Rules Configuration
+#
+# These rules can be consumed by Prometheus Alertmanager, Grafana alerts,
+# or the built-in MediaLibrary alerting engine.  Each rule defines a
+# condition, threshold, severity, and notification channel.
+#
+# Severity levels:
+#   critical  — pages on-call immediately (service down, data loss risk)
+#   warning   — creates a ticket / Slack message (degraded but functional)
+#   info      — logged & dashboarded only
+
+groups:
+  # ── Service Availability ──────────────────────────────────────
+  - name: availability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MediaLibrary process is down"
+          description: "The /api/healthz endpoint has been unreachable for >1 minute."
+          runbook: "docs/troubleshooting.md#service-down"
+
+      - alert: HealthCheckDegraded
+        expr: medialibrary_healthz_status != 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Health check reporting degraded state"
+          description: "One or more sub-system checks (DB, disk) are failing."
+
+  # ── Latency (Golden Signal) ───────────────────────────────────
+  - name: latency
+    rules:
+      - alert: HighP99Latency
+        expr: histogram_quantile(0.99, rate(http_request_duration_ms_bucket[5m])) > 2000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 latency > 2 s for 5 minutes"
+          description: "The 99th-percentile request latency has exceeded 2 seconds."
+
+      - alert: HighP50Latency
+        expr: histogram_quantile(0.50, rate(http_request_duration_ms_bucket[5m])) > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Median latency > 500 ms for 10 minutes"
+          description: "Median request latency is elevated — check for slow DB queries or disk I/O."
+
+  # ── Error Rate (Golden Signal) ────────────────────────────────
+  - name: errors
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(http_errors_total[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP error rate > 5 % for 5 minutes"
+          description: "More than 5 % of requests are returning 4xx/5xx responses."
+
+      - alert: ErrorRateElevated
+        expr: sum(rate(http_errors_total[5m])) / sum(rate(http_requests_total[5m])) > 0.01
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP error rate > 1 % for 15 minutes"
+          description: "Error rate is above baseline — investigate recent deployments."
+
+      - alert: UnhandledExceptionSpike
+        expr: increase(captured_exceptions_total[10m]) > 20
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "> 20 unhandled exceptions in 10 minutes"
+          description: "A spike in unhandled exceptions indicates a possible regression."
+
+  # ── Traffic (Golden Signal) ───────────────────────────────────
+  - name: traffic
+    rules:
+      - alert: TrafficDrop
+        expr: rate(http_requests_total[5m]) < 0.01 and rate(http_requests_total[30m] offset 1h) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Request traffic dropped to near zero"
+          description: "Traffic has dropped significantly compared to 1 hour ago."
+
+  # ── Saturation (Golden Signal) ────────────────────────────────
+  - name: saturation
+    rules:
+      - alert: DiskSpaceLow
+        expr: medialibrary_disk_free_gb < 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk free space < 5 GB"
+          description: "Media storage is running low. Clean up or expand storage."
+
+      - alert: DiskSpaceCritical
+        expr: medialibrary_disk_free_gb < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk free space < 1 GB"
+          description: "Imminent disk full — rip jobs will fail."
+
+      - alert: HighMemoryUsage
+        expr: process_max_rss_bytes > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process RSS > 1 GB for 10 minutes"
+          description: "Possible memory leak — check long-running scans or large uploads."
+
+      - alert: JobQueueBacklog
+        expr: medialibrary_queued_jobs > 10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue backlog > 10 for 30 minutes"
+          description: "Jobs are piling up — the worker may be stuck or too slow."
+
+  # ── Slow Degradation ──────────────────────────────────────────
+  - name: degradation
+    rules:
+      - alert: LatencyGradualIncrease
+        expr: >
+          avg_over_time(histogram_quantile(0.50, rate(http_request_duration_ms_bucket[5m]))[1h:5m])
+          > 1.5 * avg_over_time(histogram_quantile(0.50, rate(http_request_duration_ms_bucket[5m]))[1d:1h])
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Median latency trending upward"
+          description: "Current hourly median is 50 % above the daily average — possible slow leak."
+
+      - alert: MemoryGradualIncrease
+        expr: deriv(process_max_rss_bytes[1h]) > 10485760
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory growing ~10 MB/h for 2 hours"
+          description: "Consistent memory growth may indicate a leak."
+
+  # ── Business Metrics ──────────────────────────────────────────
+  - name: business
+    rules:
+      - alert: NoRipJobsCompleted
+        expr: increase(rip_jobs_completed_total[24h]) == 0 and increase(rip_jobs_created_total[24h]) > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rip jobs created but none completed in 24 h"
+          description: "Jobs are being created but the worker appears stuck."
+
+      - alert: HighJobFailureRate
+        expr: >
+          increase(rip_jobs_failed_total[6h])
+          / (increase(rip_jobs_completed_total[6h]) + increase(rip_jobs_failed_total[6h])) > 0.3
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job failure rate > 30 % over 6 hours"
+          description: "A significant portion of rip/download jobs are failing."
