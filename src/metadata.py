@@ -15,14 +15,14 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
-from .clients import MediaInfoClient, TMDBClient, MusicBrainzClient
-from .constants import AUDIO_EXTENSIONS
+from .clients import MediaInfoClient, MusicBrainzClient, TMDBClient
 from .config import load_config
-from .utils import setup_logger, sanitize_filename, natural_sort_key
+from .constants import AUDIO_EXTENSIONS
+from .utils import natural_sort_key, sanitize_filename, setup_logger
 
 # Load environment variables
 load_dotenv()

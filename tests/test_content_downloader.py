@@ -3,9 +3,10 @@ Tests for the content_downloader module.
 """
 
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from src.app_state import AppState
 from src.content_downloader import ContentDownloader

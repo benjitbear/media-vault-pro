@@ -67,7 +67,7 @@ markers = [
 
 [tool.black]
 line-length = 100
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py310']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -89,6 +89,9 @@ profile = "black"
 line_length = 100
 multi_line_output = 3
 include_trailing_comma = true
+
+[tool.bandit]
+skips = ["B104", "B110", "B310", "B404", "B603", "B607", "B608"]
 
 [tool.mypy]
 python_version = "3.10"

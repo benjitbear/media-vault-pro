@@ -1,9 +1,11 @@
 """Tests for media blueprint routes (/api/media, /api/search, /api/scan, etc.)."""
 
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
+
 from src.app_state import AppState
 from src.web_server import MediaServer
 

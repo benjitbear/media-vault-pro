@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 from ..constants import AUDIO_EXTENSIONS
 from ..utils import (
-    get_data_dir,
     get_media_root,
     natural_sort_key,
     rename_with_metadata,

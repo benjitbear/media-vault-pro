@@ -2,9 +2,10 @@
 Unit tests for the MetadataExtractor module
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 import json
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 
 class TestMetadataExtractor:

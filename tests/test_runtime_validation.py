@@ -5,8 +5,9 @@ Verifies that ripped file durations closely match TMDB metadata runtimes.
 
 import json
 import subprocess
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 def get_file_duration_seconds(file_path: str) -> float:

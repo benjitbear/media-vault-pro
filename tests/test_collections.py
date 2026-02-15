@@ -1,6 +1,7 @@
 """Tests for collection repository mixin (advanced operations)."""
 
 import pytest
+
 from src.app_state import AppState
 
 

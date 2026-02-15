@@ -2,20 +2,24 @@
 Unit tests for the Ripper module
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestRipper:
     """Test suite for Ripper class"""
 
     @pytest.fixture
-    def ripper(self, app_state):
+    def ripper(self, app_state, tmp_path):
         """Create a Ripper instance for testing"""
         from src.ripper import Ripper
 
-        return Ripper(config_path="config.json", app_state=app_state)
+        ripper = Ripper(config_path="config.json", app_state=app_state)
+        ripper.output_dir = tmp_path / "output"
+        ripper.output_dir.mkdir(parents=True, exist_ok=True)
+        return ripper
 
     def test_ripper_initialization(self, ripper):
         """Test that ripper initializes correctly"""

@@ -1,7 +1,9 @@
 """Tests for user management routes (/api/users, /api/me)."""
 
 import json
+
 import pytest
+
 from src.app_state import AppState
 from src.web_server import MediaServer
 

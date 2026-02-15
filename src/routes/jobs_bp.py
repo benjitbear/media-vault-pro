@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 jobs_bp = Blueprint("jobs", __name__)
 

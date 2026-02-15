@@ -12,7 +12,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..constants import ALL_MEDIA_EXTENSIONS, LIBRARY_SKIP_DIRS
 from ..utils import detect_media_type, format_size, generate_media_id, setup_logger

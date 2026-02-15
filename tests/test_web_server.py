@@ -1,11 +1,12 @@
 """Tests for web_server.py — auth, scan, safe_items, login flow."""
 
 import json
+
 import pytest
 
 from src.app_state import AppState
-from src.web_server import MediaServer
 from src.utils import generate_media_id
+from src.web_server import MediaServer
 
 
 @pytest.fixture

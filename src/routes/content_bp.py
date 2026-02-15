@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
-from ..utils import format_size, detect_media_type, generate_media_id
+from ..utils import detect_media_type, format_size, generate_media_id
 
 content_bp = Blueprint("content", __name__)
 

@@ -1,7 +1,9 @@
 """Tests for job queue routes (/api/jobs)."""
 
 import json
+
 import pytest
+
 from src.app_state import AppState
 from src.web_server import MediaServer
 

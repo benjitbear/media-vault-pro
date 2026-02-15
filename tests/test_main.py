@@ -1,10 +1,11 @@
 """Tests for the main module — job_worker, content_worker, poster sync helpers."""
 
-import pytest
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import logging
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.app_state import AppState
 

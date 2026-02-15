@@ -1,9 +1,8 @@
 """Tests for the LibraryScannerService."""
 
 import json
+
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock
 
 from src.app_state import AppState
 from src.services.library_scanner import LibraryScannerService

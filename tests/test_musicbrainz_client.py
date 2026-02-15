@@ -1,9 +1,11 @@
 """Tests for MusicBrainzClient — fingerprinting, AcoustID, MB lookups, cover art."""
 
 import json
-import requests as _requests
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+import requests as _requests
+
 from src.clients.musicbrainz_client import MusicBrainzClient
 
 
@@ -297,8 +299,9 @@ class TestDownloadCoverArt:
 
     @patch("requests.get")
     def test_successful_download(self, mock_get, client, tmp_path):
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         img = Image.new("RGB", (10, 10))
         buf = io.BytesIO()

@@ -10,6 +10,7 @@ keep working unchanged.
 import sqlite3
 import threading
 from pathlib import Path
+
 from .repositories import (
     AuthRepositoryMixin,
     CollectionRepositoryMixin,
@@ -77,8 +78,8 @@ class AppState(
     def _init_db(self):
         """Initialize database schema"""
         conn = self._get_conn()
-        conn.executescript(
-            """
+        # fmt: off
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS media (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -210,8 +211,8 @@ class AppState(
                 UNIQUE(media_id, username),
                 FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
             );
-        """
-        )
+        """)
+        # fmt: on
         conn.commit()
 
         # ── Migrations for existing DBs ──
@@ -266,8 +267,8 @@ class AppState(
         try:
             conn.execute("SELECT id FROM playlist_tracks LIMIT 1")
         except sqlite3.OperationalError:
-            conn.executescript(
-                """
+            # fmt: off
+            conn.executescript("""
                 CREATE TABLE IF NOT EXISTS playlist_tracks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     collection_id INTEGER NOT NULL,
@@ -283,8 +284,8 @@ class AppState(
                     FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
                     FOREIGN KEY (matched_media_id) REFERENCES media(id) ON DELETE SET NULL
                 );
-            """
-            )
+            """)
+            # fmt: on
             conn.commit()
 
     def set_socketio(self, socketio):

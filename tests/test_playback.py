@@ -4,12 +4,12 @@ Tests for playback progress, chunked streaming, and collection shuffle features.
 
 import io
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 from src.app_state import AppState
 from src.web_server import MediaServer
-
 
 # ── Fixtures ──────────────────────────────────────────────────────
 

@@ -1,8 +1,10 @@
 """Tests for MediaInfoClient — mediainfo extraction and chapter parsing."""
 
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from src.clients.mediainfo_client import MediaInfoClient
 
 

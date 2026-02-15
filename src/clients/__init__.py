@@ -8,8 +8,8 @@ Each module encapsulates a single API / CLI tool:
 """
 
 from .mediainfo_client import MediaInfoClient
-from .tmdb_client import TMDBClient
 from .musicbrainz_client import MusicBrainzClient
+from .tmdb_client import TMDBClient
 
 __all__ = [
     "MediaInfoClient",

@@ -25,7 +25,7 @@ COPY config.json ./
 COPY src/ ./src/
 
 # Create directories for data and logs
-RUN mkdir -p /data/metadata /data/logs && chown -R medialibrary:medialibrary /app /data
+RUN mkdir -p /media/data /data/metadata /data/logs && chown -R medialibrary:medialibrary /app /data /media
 
 USER medialibrary
 

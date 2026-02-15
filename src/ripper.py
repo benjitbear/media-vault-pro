@@ -8,20 +8,20 @@ import shutil
 import subprocess
 import time
 from collections import deque
-from pathlib import Path
-from typing import Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from .constants import AUDIO_CD_EXTENSIONS
 from .config import load_config
+from .constants import AUDIO_CD_EXTENSIONS
 from .utils import (
-    setup_logger,
-    sanitize_filename,
-    format_time,
-    send_notification,
     configure_notifications,
-    print_progress,
+    format_time,
     natural_sort_key,
+    print_progress,
+    sanitize_filename,
+    send_notification,
+    setup_logger,
 )
 
 if TYPE_CHECKING:

@@ -1,6 +1,6 @@
 """Podcast subscription and episode routes."""
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 podcasts_bp = Blueprint("podcasts", __name__)
 

@@ -1,7 +1,9 @@
 """Tests for TMDBClient — search, title cleaning, image download, disambiguation."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from src.clients.tmdb_client import TMDBClient
 
 
@@ -262,8 +264,9 @@ class TestDownloadImage:
 
     @patch("requests.get")
     def test_successful_download(self, mock_get, client, tmp_path):
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         img = Image.new("RGB", (10, 10), color="red")
         buf = io.BytesIO()

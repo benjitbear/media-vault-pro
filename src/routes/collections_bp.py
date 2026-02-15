@@ -1,6 +1,6 @@
 """Collection and playlist routes."""
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 collections_bp = Blueprint("collections", __name__)
 

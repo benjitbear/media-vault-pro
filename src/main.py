@@ -11,14 +11,14 @@ import threading
 import time
 
 from .app_state import AppState
+from .config import load_config, validate_config
 from .content_downloader import ContentDownloader
 from .disc_monitor import DiscMonitor
 from .metadata import MetadataExtractor
 from .ripper import Ripper
-from .config import load_config, validate_config
-from .utils import setup_logger, configure_notifications
+from .utils import configure_notifications, setup_logger
 from .web_server import MediaServer
-from .workers import job_worker, content_worker, podcast_checker
+from .workers import content_worker, job_worker, podcast_checker
 
 
 def main():

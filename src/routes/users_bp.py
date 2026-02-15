@@ -1,6 +1,6 @@
 """User management routes (admin-only where noted)."""
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 users_bp = Blueprint("users", __name__)
 

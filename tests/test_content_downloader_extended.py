@@ -1,8 +1,9 @@
 """Tests for ContentDownloader — video download, article archive, podcast, playlists."""
 
 import json
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from src.app_state import AppState
 

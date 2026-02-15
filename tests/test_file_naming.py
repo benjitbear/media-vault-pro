@@ -5,11 +5,11 @@ Tests for file renaming and media type detection utilities.
 from pathlib import Path
 
 from src.utils import (
+    detect_media_type,
+    natural_sort_key,
     rename_with_metadata,
     reorganize_audio_album,
-    detect_media_type,
     sanitize_filename,
-    natural_sort_key,
 )
 
 

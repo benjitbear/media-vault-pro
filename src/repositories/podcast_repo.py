@@ -81,15 +81,15 @@ class PodcastRepositoryMixin:
     def get_due_podcasts(self) -> List[Dict[str, Any]]:
         """Get podcasts that are due for a feed check."""
         conn = self._get_conn()
-        rows = conn.execute(
-            """
+        # fmt: off
+        rows = conn.execute("""
             SELECT * FROM podcasts
             WHERE is_active = 1
               AND (last_checked IS NULL
                    OR datetime(last_checked, '+' || check_interval_hours || ' hours')
                       <= datetime('now'))
-        """
-        ).fetchall()
+        """).fetchall()
+        # fmt: on
         return [dict(r) for r in rows]
 
     # ── Podcast Episodes ─────────────────────────────────────────

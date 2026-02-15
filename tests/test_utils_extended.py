@@ -1,23 +1,23 @@
 """Tests for utility functions — config, logging, file helpers, formatting."""
 
-import os
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
+
 from src.utils import (
     detect_media_type,
-    sanitize_filename,
+    ensure_directory,
     format_size,
     format_time,
-    ensure_directory,
-    natural_sort_key,
-    load_config,
-    get_media_root,
     get_data_dir,
-    setup_logger,
+    get_media_root,
+    load_config,
+    natural_sort_key,
     rename_with_metadata,
+    sanitize_filename,
+    setup_logger,
 )
-
 
 # ── detect_media_type (additional edge cases) ────────────────────
 
