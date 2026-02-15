@@ -1,10 +1,11 @@
 """Tests for the config module — loading, placeholder resolution, validation."""
 
 import json
-
+import os
 import pytest
+from pathlib import Path
 
-from src.config import ConfigError, load_config, validate_config
+from src.config import load_config, validate_config, ConfigError
 
 
 @pytest.fixture

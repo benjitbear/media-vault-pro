@@ -12,11 +12,11 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.request import Request, urlopen
+from urllib.request import urlopen, Request
 
 from .app_state import AppState
 from .config import load_config
-from .utils import format_size, sanitize_filename, setup_logger
+from .utils import setup_logger, sanitize_filename, format_size
 
 
 def _escape_html(text: str) -> str:

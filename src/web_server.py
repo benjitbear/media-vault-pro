@@ -4,37 +4,39 @@ Features: WebSocket (Socket.IO), auth, library caching, range requests,
 job management, collections, metadata editing, download, dark mode.
 """
 
+import json
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from flask import (
     Flask,
-    Response,
-    jsonify,
-    redirect,
     render_template,
+    jsonify,
     request,
+    redirect,
+    Response,
 )
 from flask_socketio import SocketIO, emit
 
 from .app_state import AppState
 from .config import load_config
-from .routes import (
-    collections_bp,
-    content_bp,
-    jobs_bp,
-    media_bp,
-    playback_bp,
-    podcasts_bp,
-    users_bp,
-)
 from .services.library_scanner import LibraryScannerService
 from .utils import (
-    configure_notifications,
     setup_logger,
+    configure_notifications,
+)
+from .routes import (
+    media_bp,
+    jobs_bp,
+    collections_bp,
+    users_bp,
+    content_bp,
+    podcasts_bp,
+    playback_bp,
 )
 
 

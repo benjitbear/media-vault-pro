@@ -2,19 +2,20 @@
 Disc detection and automatic ripping daemon
 """
 
-import json
 import shutil
-import signal
-import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Set
+from typing import Any, Dict, Set, TYPE_CHECKING
+import signal
+import sys
 
-from .config import load_config
-from .constants import AUDIO_CD_EXTENSIONS, IGNORE_VOLUMES
-from .metadata import MetadataExtractor
+import json
+
 from .ripper import Ripper
-from .utils import configure_notifications, send_notification, setup_logger
+from .metadata import MetadataExtractor
+from .constants import AUDIO_CD_EXTENSIONS, IGNORE_VOLUMES
+from .config import load_config
+from .utils import setup_logger, send_notification, configure_notifications
 
 if TYPE_CHECKING:
     from .app_state import AppState

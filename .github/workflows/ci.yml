@@ -180,25 +180,24 @@ jobs:
         if: needs.test.result == 'failure' || needs.lint.result == 'failure'
         run: curl -fsS -m 10 --retry 5 "$HEALTHCHECKS_PING_URL/fail" || true
 
-  # ─── Deploy (on main only) ─────────────────────────────────
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, docker]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.DEPLOY_HOST != ''
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd ~/MediaLibrary
-            git pull origin main
-            docker compose pull || true
-            docker compose up -d --build
-            echo "✓ Deployed $(git rev-parse --short HEAD)"
+  # ─── Deploy (on main only, requires production environment secrets) ──
+  # deploy:
+  #   name: Deploy
+  #   runs-on: ubuntu-latest
+  #   needs: [lint, typecheck, test, docker]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   environment: production
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1
+  #       with:
+  #         host: ${{ secrets.DEPLOY_HOST }}
+  #         username: ${{ secrets.DEPLOY_USER }}
+  #         key: ${{ secrets.DEPLOY_SSH_KEY }}
+  #         script: |
+  #           cd ~/MediaLibrary
+  #           git pull origin main
+  #           docker compose pull || true
+  #           docker compose up -d --build
+  #           echo "✓ Deployed $(git rev-parse --short HEAD)"
