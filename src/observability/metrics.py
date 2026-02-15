@@ -120,8 +120,11 @@ class MetricsCollector:
     # ── Counters ─────────────────────────────────────────────────
 
     def inc(
-        self, name: str, amount: float = 1.0,
-        *, labels: Optional[Dict[str, str]] = None,
+        self,
+        name: str,
+        amount: float = 1.0,
+        *,
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Increment a counter metric."""
         key = f"{name}{{{_labels_key(labels)}}}" if labels else name
@@ -130,24 +133,33 @@ class MetricsCollector:
     # ── Gauges ───────────────────────────────────────────────────
 
     def gauge_set(
-        self, name: str, value: float,
-        *, labels: Optional[Dict[str, str]] = None,
+        self,
+        name: str,
+        value: float,
+        *,
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Set a gauge to an absolute value."""
         key = f"{name}{{{_labels_key(labels)}}}" if labels else name
         self._gauges[key].set(value)
 
     def gauge_inc(
-        self, name: str, amount: float = 1.0,
-        *, labels: Optional[Dict[str, str]] = None,
+        self,
+        name: str,
+        amount: float = 1.0,
+        *,
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Increment a gauge."""
         key = f"{name}{{{_labels_key(labels)}}}" if labels else name
         self._gauges[key].inc(amount)
 
     def gauge_dec(
-        self, name: str, amount: float = 1.0,
-        *, labels: Optional[Dict[str, str]] = None,
+        self,
+        name: str,
+        amount: float = 1.0,
+        *,
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Decrement a gauge."""
         key = f"{name}{{{_labels_key(labels)}}}" if labels else name

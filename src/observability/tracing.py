@@ -176,9 +176,7 @@ class RequestTracer:
             # Log the request
             if self.logger:
                 log_method = (
-                    self.logger.warning
-                    if response.status_code >= 400
-                    else self.logger.info
+                    self.logger.warning if response.status_code >= 400 else self.logger.info
                 )
                 log_method(
                     "%s %s %s %.1fms",

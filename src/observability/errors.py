@@ -119,10 +119,15 @@ class ErrorTracker:
             # Return a JSON error to the client
             from flask import jsonify
 
-            return jsonify({
-                "error": "Internal Server Error",
-                "request_id": getattr(request, "trace_id", None) or "",
-            }), 500
+            return (
+                jsonify(
+                    {
+                        "error": "Internal Server Error",
+                        "request_id": getattr(request, "trace_id", None) or "",
+                    }
+                ),
+                500,
+            )
 
         # Also hook into 404 etc. for tracking
         @app.errorhandler(404)

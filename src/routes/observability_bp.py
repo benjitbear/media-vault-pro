@@ -52,8 +52,8 @@ def healthz():
     try:
         media_root = os.environ.get("MEDIA_ROOT", str(Path.home() / "Media"))
         stat = os.statvfs(media_root)
-        free_gb = (stat.f_bavail * stat.f_frsize) / (1024 ** 3)
-        total_gb = (stat.f_blocks * stat.f_frsize) / (1024 ** 3)
+        free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
+        total_gb = (stat.f_blocks * stat.f_frsize) / (1024**3)
         used_pct = round((1 - stat.f_bavail / stat.f_blocks) * 100, 1) if stat.f_blocks else 0
         disk_ok = free_gb > 1.0  # warn if <1GB free
         checks["disk"] = {

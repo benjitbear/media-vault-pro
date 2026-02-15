@@ -134,9 +134,7 @@ class MediaServer:
         self.metrics = MetricsCollector()
         self.error_tracker = ErrorTracker()
         self.error_tracker.install_flask(self.app)
-        self.tracer = RequestTracer(
-            self.app, logger=self.logger, metrics=self.metrics
-        )
+        self.tracer = RequestTracer(self.app, logger=self.logger, metrics=self.metrics)
 
         self.logger.info("MediaServer initialized with WebSocket support")
 
