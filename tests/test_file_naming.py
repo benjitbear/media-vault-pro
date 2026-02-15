@@ -1,9 +1,7 @@
 """
 Tests for file renaming and media type detection utilities.
 """
-import os
-import json
-import pytest
+
 from pathlib import Path
 
 from src.utils import (
@@ -11,6 +9,7 @@ from src.utils import (
     reorganize_audio_album,
     detect_media_type,
     sanitize_filename,
+    natural_sort_key,
 )
 
 
@@ -18,41 +17,41 @@ class TestDetectMediaType:
     """Tests for detect_media_type()"""
 
     def test_video_extensions(self):
-        assert detect_media_type('movie.mp4') == 'video'
-        assert detect_media_type('movie.mkv') == 'video'
-        assert detect_media_type('clip.avi') == 'video'
-        assert detect_media_type('film.m4v') == 'video'
-        assert detect_media_type('video.mov') == 'video'
-        assert detect_media_type('video.webm') == 'video'
+        assert detect_media_type("movie.mp4") == "video"
+        assert detect_media_type("movie.mkv") == "video"
+        assert detect_media_type("clip.avi") == "video"
+        assert detect_media_type("film.m4v") == "video"
+        assert detect_media_type("video.mov") == "video"
+        assert detect_media_type("video.webm") == "video"
 
     def test_audio_extensions(self):
-        assert detect_media_type('song.mp3') == 'audio'
-        assert detect_media_type('track.flac') == 'audio'
-        assert detect_media_type('music.aac') == 'audio'
-        assert detect_media_type('audio.m4a') == 'audio'
-        assert detect_media_type('sound.ogg') == 'audio'
-        assert detect_media_type('sound.wav') == 'audio'
+        assert detect_media_type("song.mp3") == "audio"
+        assert detect_media_type("track.flac") == "audio"
+        assert detect_media_type("music.aac") == "audio"
+        assert detect_media_type("audio.m4a") == "audio"
+        assert detect_media_type("sound.ogg") == "audio"
+        assert detect_media_type("sound.wav") == "audio"
 
     def test_image_extensions(self):
-        assert detect_media_type('photo.jpg') == 'image'
-        assert detect_media_type('pic.png') == 'image'
-        assert detect_media_type('art.gif') == 'image'
-        assert detect_media_type('banner.webp') == 'image'
+        assert detect_media_type("photo.jpg") == "image"
+        assert detect_media_type("pic.png") == "image"
+        assert detect_media_type("art.gif") == "image"
+        assert detect_media_type("banner.webp") == "image"
 
     def test_document_extensions(self):
-        assert detect_media_type('book.pdf') == 'document'
-        assert detect_media_type('novel.epub') == 'document'
-        assert detect_media_type('page.html') == 'document'
+        assert detect_media_type("book.pdf") == "document"
+        assert detect_media_type("novel.epub") == "document"
+        assert detect_media_type("page.html") == "document"
 
     def test_other_extensions(self):
-        assert detect_media_type('archive.zip') == 'other'
-        assert detect_media_type('data.bin') == 'other'
-        assert detect_media_type('noext') == 'other'
+        assert detect_media_type("archive.zip") == "other"
+        assert detect_media_type("data.bin") == "other"
+        assert detect_media_type("noext") == "other"
 
     def test_case_insensitive(self):
-        assert detect_media_type('Movie.MP4') == 'video'
-        assert detect_media_type('Song.FLAC') == 'audio'
-        assert detect_media_type('Photo.JPG') == 'image'
+        assert detect_media_type("Movie.MP4") == "video"
+        assert detect_media_type("Song.FLAC") == "audio"
+        assert detect_media_type("Photo.JPG") == "image"
 
 
 class TestRenameWithMetadata:
@@ -64,9 +63,9 @@ class TestRenameWithMetadata:
         src.write_text("fake video data")
 
         metadata = {
-            'tmdb': {
-                'title': 'The Matrix',
-                'year': '1999',
+            "tmdb": {
+                "title": "The Matrix",
+                "year": "1999",
             }
         }
 
@@ -80,7 +79,7 @@ class TestRenameWithMetadata:
         src = tmp_path / "raw_file.mp4"
         src.write_text("data")
 
-        metadata = {'tmdb': {'title': 'Inception'}}
+        metadata = {"tmdb": {"title": "Inception"}}
         result = rename_with_metadata(str(src), metadata)
         assert Path(result).name == "Inception.mp4"
 
@@ -88,7 +87,7 @@ class TestRenameWithMetadata:
         src = tmp_path / "untitled.mp4"
         src.write_text("data")
 
-        metadata = {'title': 'Fallback Title'}
+        metadata = {"title": "Fallback Title"}
         result = rename_with_metadata(str(src), metadata)
         # Should not rename if no tmdb data
         assert result is None or Path(result).name == "untitled.mp4"
@@ -101,7 +100,7 @@ class TestRenameWithMetadata:
         src = tmp_path / "duplicate_rip.mp4"
         src.write_text("second")
 
-        metadata = {'tmdb': {'title': 'The Matrix', 'year': '1999'}}
+        metadata = {"tmdb": {"title": "The Matrix", "year": "1999"}}
         result = rename_with_metadata(str(src), metadata)
         assert result is not None
         assert "The Matrix (1999) (2).mp4" in Path(result).name
@@ -110,16 +109,16 @@ class TestRenameWithMetadata:
         src = tmp_path / "raw.mp4"
         src.write_text("data")
 
-        metadata = {'tmdb': {'title': 'Movie: The Sequel / Part 2', 'year': '2020'}}
+        metadata = {"tmdb": {"title": "Movie: The Sequel / Part 2", "year": "2020"}}
         result = rename_with_metadata(str(src), metadata)
         assert result is not None
         name = Path(result).name
-        assert '/' not in name
-        assert ':' not in name
+        assert "/" not in name
+        assert ":" not in name
 
     def test_rename_nonexistent_file(self):
         """When file doesn't exist, returns the original path"""
-        result = rename_with_metadata("/nonexistent/file.mp4", {'tmdb': {'title': 'X'}})
+        result = rename_with_metadata("/nonexistent/file.mp4", {"tmdb": {"title": "X"}})
         assert result == "/nonexistent/file.mp4"
 
 
@@ -137,15 +136,15 @@ class TestReorganizeAudioAlbum:
         base_output.mkdir()
 
         metadata = {
-            'musicbrainz': {
-                'artist': 'Pink Floyd',
-                'title': 'The Dark Side of the Moon',
-                'year': '1973',
-                'tracks': [
-                    {'title': 'Speak to Me', 'position': 1, 'filename': 'track1.mp3'},
-                    {'title': 'Breathe', 'position': 2, 'filename': 'track2.mp3'},
-                    {'title': 'On the Run', 'position': 3, 'filename': 'track3.mp3'},
-                ]
+            "musicbrainz": {
+                "artist": "Pink Floyd",
+                "title": "The Dark Side of the Moon",
+                "year": "1973",
+                "tracks": [
+                    {"title": "Speak to Me", "position": 1, "filename": "track1.mp3"},
+                    {"title": "Breathe", "position": 2, "filename": "track2.mp3"},
+                    {"title": "On the Run", "position": 3, "filename": "track3.mp3"},
+                ],
             }
         }
 
@@ -153,15 +152,16 @@ class TestReorganizeAudioAlbum:
         assert result is not None
         result_path = Path(result)
         assert result_path.exists()
-        # Check artist/album directory structure
-        assert 'Pink Floyd' in str(result_path)
+        # Check music/artist/album directory structure
+        assert "music" in result_path.parts
+        assert "Pink Floyd" in str(result_path)
 
     def test_reorganize_no_musicbrainz(self, tmp_path):
         album_dir = tmp_path / "raw_album"
         album_dir.mkdir()
         (album_dir / "track.mp3").write_text("audio")
 
-        metadata = {'tmdb': {'title': 'Not Music'}}
+        metadata = {"tmdb": {"title": "Not Music"}}
         result = reorganize_audio_album(str(album_dir), metadata, str(tmp_path / "out"))
         # Returns original directory path when no musicbrainz data
         assert result == str(album_dir)
@@ -171,19 +171,83 @@ class TestSanitizeFilename:
     """Tests for the sanitize_filename utility"""
 
     def test_removes_slashes(self):
-        assert '/' not in sanitize_filename("path/name")
+        assert "/" not in sanitize_filename("path/name")
 
     def test_removes_special_chars(self):
         result = sanitize_filename("file:name*test?.mp4")
-        assert ':' not in result
-        assert '*' not in result
-        assert '?' not in result
+        assert ":" not in result
+        assert "*" not in result
+        assert "?" not in result
 
     def test_strips_whitespace(self):
         result = sanitize_filename("  hello  world  ")
-        assert not result.startswith(' ')
-        assert not result.endswith(' ')
+        assert not result.startswith(" ")
+        assert not result.endswith(" ")
 
     def test_empty_string(self):
         result = sanitize_filename("")
         assert result == "" or result == "untitled"  # Implementation may vary
+
+
+class TestNaturalSortKey:
+    """Tests for natural_sort_key() — numeric-aware path sorting"""
+
+    def test_unpadded_track_numbers(self):
+        """Non-zero-padded numbers must sort numerically, not lexicographically."""
+        names = [
+            "Track 1.aiff",
+            "Track 10.aiff",
+            "Track 2.aiff",
+            "Track 3.aiff",
+            "Track 9.aiff",
+        ]
+        paths = [Path(n) for n in names]
+        result = sorted(paths, key=natural_sort_key)
+        assert [p.name for p in result] == [
+            "Track 1.aiff",
+            "Track 2.aiff",
+            "Track 3.aiff",
+            "Track 9.aiff",
+            "Track 10.aiff",
+        ]
+
+    def test_zero_padded_already_correct(self):
+        """Zero-padded names should keep their correct order."""
+        names = ["01 - Song.mp3", "02 - Song.mp3", "10 - Song.mp3"]
+        paths = [Path(n) for n in names]
+        result = sorted(paths, key=natural_sort_key)
+        assert [p.name for p in result] == names
+
+    def test_song_title_filenames(self):
+        """Non-numeric names sort case-insensitively."""
+        names = ["Banana.aiff", "apple.aiff", "Cherry.aiff"]
+        paths = [Path(n) for n in names]
+        result = sorted(paths, key=natural_sort_key)
+        assert [p.name for p in result] == [
+            "apple.aiff",
+            "Banana.aiff",
+            "Cherry.aiff",
+        ]
+
+    def test_mixed_prefix_numbers(self):
+        """Numbers embedded anywhere in the name sort numerically."""
+        names = ["file12.txt", "file2.txt", "file1.txt"]
+        paths = [Path(n) for n in names]
+        result = sorted(paths, key=natural_sort_key)
+        assert [p.name for p in result] == [
+            "file1.txt",
+            "file2.txt",
+            "file12.txt",
+        ]
+
+    def test_ten_track_cd_realistic(self):
+        """Simulate a 10-track audio CD mounted on macOS without zero-padding."""
+        names = [f"Track {i}.aiff" for i in range(1, 11)]
+        # Lexicographic sort would put Track 10 between 1 and 2
+        lex_sorted = sorted(names)
+        assert lex_sorted[1] == "Track 10.aiff"  # confirms the bug
+
+        # Natural sort must restore the correct order
+        paths = [Path(n) for n in names]
+        result = sorted(paths, key=natural_sort_key)
+        assert [p.name for p in result] == [f"Track {i}.aiff" for i in range(1, 11)]
