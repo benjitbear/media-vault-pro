@@ -24,6 +24,7 @@ class PodcastRepositoryMixin:
         try:
             conn.execute(
                 """
+
                 INSERT INTO podcasts (id, feed_url, title, author, description, artwork_url)
                 VALUES (?, ?, ?, ?, ?, ?)
             """,
@@ -108,6 +109,7 @@ class PodcastRepositoryMixin:
         try:
             conn.execute(
                 """
+
                 INSERT INTO podcast_episodes
                     (id, podcast_id, title, audio_url, duration_seconds,
                      published_at, description)

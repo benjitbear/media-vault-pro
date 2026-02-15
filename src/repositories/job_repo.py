@@ -27,6 +27,7 @@ class JobRepositoryMixin:
         conn = self._get_conn()
         conn.execute(
             """
+
             INSERT INTO jobs (id, title, source_path, title_number,
                              disc_type, disc_hints, job_type, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)

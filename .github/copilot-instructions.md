@@ -38,7 +38,10 @@ Threads share state via `AppState` singleton. Each thread gets its own SQLite co
 
 ### Configuration
 - `.env` loaded by `python-dotenv` → environment variables
-- `config.json` parsed by `utils.load_config()` with `${ENV_VAR:-default}` interpolation
+- `config.json` parsed by `config.load_config()` with `${ENV_VAR:-default}` interpolation
+- `config.validate_config()` validates required sections/keys at startup
+- Config is loaded **once** in `main()` and injected as a dict to all component constructors
+- Components accept `config: dict` (preferred) or `config_path: str` (backward compat)
 - `MEDIA_ROOT` env var drives all path resolution
 - See `docs/CONFIGURATION.md` for every config key
 
@@ -50,7 +53,8 @@ All magic numbers, extension sets, thresholds, and defaults live in `src/constan
 ### Imports
 ```python
 from src.constants import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, MIME_TYPES
-from src.utils import setup_logger, load_config, get_media_root
+from src.config import load_config, validate_config, ConfigError
+from src.utils import setup_logger, get_media_root, generate_media_id
 from src.app_state import AppState
 ```
 
@@ -123,14 +127,20 @@ tests/test_<module_name>.py  →  tests one src/<module_name>.py
 src/
 ├── __init__.py              # Package exports
 ├── app_state.py             # SQLite singleton (inherits repo mixins)
+├── config.py                # Config loading, validation, ConfigError
 ├── constants.py             # All constants, extension sets, thresholds
 ├── content_downloader.py    # yt-dlp, trafilatura, feedparser, playlists
 ├── disc_monitor.py          # macOS disc detection (polls diskutil)
 ├── main.py                  # Entry point, thread orchestration
 ├── metadata.py              # TMDB, MusicBrainz, AcoustID, MediaInfo
 ├── ripper.py                # HandBrakeCLI (video) + ffmpeg (audio CD)
-├── utils.py                 # Config, logging, file helpers
+├── utils.py                 # Logging, file helpers, notifications
 ├── web_server.py            # Flask + Socket.IO (REST API + SPA)
+├── clients/                 # External API client modules
+│   ├── __init__.py
+│   ├── mediainfo_client.py
+│   ├── musicbrainz_client.py
+│   └── tmdb_client.py
 ├── repositories/            # Domain-specific DB mixins for AppState
 │   ├── __init__.py
 │   ├── auth_repo.py
@@ -139,6 +149,24 @@ src/
 │   ├── media_repo.py
 │   ├── playback_repo.py
 │   └── podcast_repo.py
+├── routes/                  # Flask blueprint route handlers
+│   ├── __init__.py
+│   ├── collections_bp.py
+│   ├── content_bp.py
+│   ├── jobs_bp.py
+│   ├── media_bp.py
+│   ├── playback_bp.py
+│   ├── podcasts_bp.py
+│   └── users_bp.py
+├── services/                # Business logic services
+│   ├── __init__.py
+│   └── library_scanner.py   # Library scanning (extracted from web_server)
+├── workers/                 # Background thread workers
+│   ├── __init__.py
+│   ├── job_worker.py        # Rip-job queue processor
+│   ├── content_worker.py    # Content download queue processor
+│   ├── podcast_checker.py   # Periodic podcast feed checker
+│   └── poster_sync.py       # Post-rip poster artwork sync
 └── templates/
     ├── index.html           # SPA frontend
     └── login.html           # Login / first-run setup

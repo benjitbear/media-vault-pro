@@ -143,7 +143,9 @@ class LibraryScannerService:
             self.logger.error("Error loading metadata for %s: %s", file_path, e)
             return None
 
-    def _attach_poster(self, file_path: Path, item: Dict[str, Any], metadata: Optional[dict]) -> None:
+    def _attach_poster(
+        self, file_path: Path, item: Dict[str, Any], metadata: Optional[dict]
+    ) -> None:
         """Set ``poster_path`` on *item* if a poster image exists."""
         poster_file = self.thumbnails_path / f"{file_path.stem}_poster.jpg"
         if poster_file.exists():

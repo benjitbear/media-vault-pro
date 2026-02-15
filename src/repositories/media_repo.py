@@ -12,6 +12,7 @@ class MediaRepositoryMixin:
         conn = self._get_conn()
         conn.execute(
             """
+
             INSERT INTO media (id, title, filename, file_path, file_size, size_formatted,
                              created_at, modified_at, year, overview, rating, genres,
                              director, cast_members, poster_path, has_metadata,
@@ -76,6 +77,7 @@ class MediaRepositoryMixin:
         like = f"%{query}%"
         rows = conn.execute(
             """
+
             SELECT * FROM media
             WHERE title LIKE ? OR director LIKE ? OR cast_members LIKE ? OR genres LIKE ?
             ORDER BY title COLLATE NOCASE

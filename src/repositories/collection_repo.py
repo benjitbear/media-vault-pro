@@ -14,6 +14,7 @@ class CollectionRepositoryMixin:
             col = dict(row)
             items = conn.execute(
                 """
+
                 SELECT m.* FROM media m
                 JOIN collection_items ci ON m.id = ci.media_id
                 WHERE ci.collection_id = ?
@@ -71,6 +72,7 @@ class CollectionRepositoryMixin:
         conn = self._get_conn()
         rows = conn.execute(
             """
+
             SELECT m.* FROM media m
             JOIN collection_items ci ON m.id = ci.media_id
             WHERE ci.collection_id = ?
@@ -114,6 +116,7 @@ class CollectionRepositoryMixin:
         for i, t in enumerate(tracks):
             conn.execute(
                 """
+
                 INSERT INTO playlist_tracks
                     (collection_id, sort_order, title, artist, album,
                      duration_ms, artwork_url, spotify_uri, isrc,
@@ -140,6 +143,7 @@ class CollectionRepositoryMixin:
         conn = self._get_conn()
         rows = conn.execute(
             """
+
             SELECT pt.*, m.id AS local_id, m.file_path, m.poster_path,
                    m.duration_seconds AS local_dur
             FROM playlist_tracks pt

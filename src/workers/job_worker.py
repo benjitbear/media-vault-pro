@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..constants import AUDIO_EXTENSIONS
-from ..utils import get_data_dir, get_media_root, natural_sort_key, rename_with_metadata, reorganize_audio_album
+from ..utils import (
+    get_data_dir,
+    get_media_root,
+    natural_sort_key,
+    rename_with_metadata,
+    reorganize_audio_album,
+)
 from .poster_sync import sync_album_poster, sync_video_poster
 
 if TYPE_CHECKING:

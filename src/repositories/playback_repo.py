@@ -29,6 +29,7 @@ class PlaybackRepositoryMixin:
         conn = self._get_conn()
         conn.execute(
             """
+
             INSERT INTO playback_progress
                 (media_id, username, position_seconds, duration_seconds, finished, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -66,6 +67,7 @@ class PlaybackRepositoryMixin:
         conn = self._get_conn()
         rows = conn.execute(
             """
+
             SELECT m.*, pp.position_seconds AS progress_position,
                    pp.duration_seconds AS progress_duration,
                    pp.updated_at AS progress_updated_at

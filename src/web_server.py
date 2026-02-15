@@ -23,15 +23,11 @@ from flask import (
 from flask_socketio import SocketIO, emit
 
 from .app_state import AppState
-from .constants import ALL_MEDIA_EXTENSIONS, LIBRARY_SKIP_DIRS
 from .config import load_config
 from .services.library_scanner import LibraryScannerService
 from .utils import (
     setup_logger,
-    format_size,
     configure_notifications,
-    detect_media_type,
-    generate_media_id,
 )
 from .routes import (
     media_bp,
