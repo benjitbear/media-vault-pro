@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Media Library</title>
+    <title>{% if setup_mode %}Setup{% else %}Login{% endif %} - Media Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { darkMode: 'class' }</script>
 </head>
@@ -11,7 +11,12 @@
     <div class="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md">
         <div class="text-center mb-6">
             <h1 class="text-3xl font-bold">Media Library</h1>
+            {% if setup_mode %}
+            <p class="text-indigo-500 dark:text-indigo-400 mt-2 font-medium">Create your admin account</p>
+            <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">This is a one-time setup.</p>
+            {% else %}
             <p class="text-gray-500 dark:text-gray-400 mt-2">Sign in to continue</p>
+            {% endif %}
         </div>
         {% if error %}
         <div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg mb-4 text-sm">
@@ -30,7 +35,7 @@
             <button type="submit"
                     class="w-full p-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white
                            font-semibold transition">
-                Sign In
+                {% if setup_mode %}Create Account{% else %}Sign In{% endif %}
             </button>
         </form>
     </div>
