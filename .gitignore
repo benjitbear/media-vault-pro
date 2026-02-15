@@ -21,6 +21,7 @@ wheels/
 *.egg
 MANIFEST
 venv/
+.venv/
 env/
 ENV/
 
@@ -46,6 +47,9 @@ data/temp/
 # OS
 .DS_Store
 Thumbs.db
+
+# Stale build artifacts
+*.egg-info/
 
 # Media files (only track metadata, not actual media)
 *.mp4

@@ -15,7 +15,7 @@ install:
 	pip install -e .
 
 dev-install:
-	pip install -e ".[dev]"
+	pip install -e ".[dev,content]"
 
 test:
 	pytest
@@ -46,10 +46,13 @@ clean:
 	find . -type f -name "*.pyo" -delete
 
 run-monitor:
-	python src/disc_monitor.py
+	python -m src.main --config config.json --mode monitor
 
 run-server:
-	python src/web_server.py
+	python -m src.main --config config.json --mode server
+
+run-full:
+	python -m src.main --config config.json --mode full
 
 setup:
 	python scripts/setup.py
