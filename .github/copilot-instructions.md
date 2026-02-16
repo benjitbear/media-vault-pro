@@ -160,7 +160,8 @@ src/
 │   └── users_bp.py
 ├── services/                # Business logic services
 │   ├── __init__.py
-│   └── library_scanner.py   # Library scanning (extracted from web_server)
+│   ├── library_scanner.py   # Library scanning (extracted from web_server)
+│   └── media_identifier.py  # Post-upload identify pipeline (guessit + TMDB)
 ├── workers/                 # Background thread workers
 │   ├── __init__.py
 │   ├── job_worker.py        # Rip-job queue processor
@@ -179,6 +180,31 @@ src/
 3. **WAL mode:** SQLite WAL allows concurrent reads but only one writer. Long-running writes can block other writers.
 4. **macOS-only features:** `disc_monitor.py` and `ripper.py` depend on macOS APIs (`diskutil`, optical drive access). They cannot run in Docker.
 5. **Console entry points:** `pyproject.toml` defines 4 CLI commands: `media-ripper`, `disc-monitor`, `media-server`, `media-server-full`.
+
+## After Every Code Change
+
+### 1. Run Tests
+Run the full test suite after every code change to catch regressions early:
+```bash
+make test              # Full suite with coverage
+```
+If you added or changed a specific module, also run its tests in isolation to verify:
+```bash
+pytest tests/test_<module_name>.py -v
+```
+All tests must pass before the change is considered complete. If a change alters behaviour, update or add tests to cover it.
+
+### 2. Update Documentation
+Keep documentation in sync with the code. After every meaningful change:
+
+- **`CHANGELOG.md`** — **Always** add an entry under the `[Unreleased]` section describing what changed. Use the existing format: group entries under `Added`, `Changed`, `Fixed`, or `Removed` headings. Include the affected module or area.
+- **`docs/API.md`** — Update if any REST or WebSocket endpoints were added, changed, or removed.
+- **`docs/SCHEMA.md`** — Update if any database tables or columns were added, changed, or removed.
+- **`docs/CONFIGURATION.md`** — Update if any config keys were added, changed, or removed.
+- **`docs/ARCHITECTURE.md`** — Update if the system design, thread model, or data flow changed significantly.
+- **This file (`copilot-instructions.md`)** — Update if file structure, conventions, or architecture patterns changed.
+
+The change is **not done** until tests pass and relevant docs are updated.
 
 ## Key Documentation
 

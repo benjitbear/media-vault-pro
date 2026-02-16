@@ -12,12 +12,12 @@ class TestRipper:
     """Test suite for Ripper class"""
 
     @pytest.fixture
-    def ripper(self, app_state, tmp_path):
+    def ripper(self, app_state, tmp_path, test_config):
         """Create a Ripper instance for testing"""
         from src.ripper import Ripper
 
-        ripper = Ripper(config_path="config.json", app_state=app_state)
-        ripper.output_dir = tmp_path / "output"
+        test_config["output"]["base_directory"] = str(tmp_path / "output")
+        ripper = Ripper(config=test_config, app_state=app_state)
         ripper.output_dir.mkdir(parents=True, exist_ok=True)
         return ripper
 

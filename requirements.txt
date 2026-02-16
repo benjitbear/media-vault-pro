@@ -6,6 +6,7 @@ requests>=2.31.0
 Pillow>=10.2.0
 python-dotenv>=1.0.0
 werkzeug>=3.0.0
+guessit>=3.8.0
 
 # Audio fingerprinting (optional — falls back to name-based search if missing)
 pyacoustid>=1.3.0

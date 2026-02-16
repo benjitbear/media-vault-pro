@@ -186,6 +186,49 @@ Serve poster image (JPEG).
 
 ## Metadata Editing
 
+### `POST /api/media/<media_id>/identify`
+
+Identify or re-identify a media item via TMDB. Parses the filename with `guessit`,
+extracts MediaInfo (duration, codec), searches TMDB, downloads poster/backdrop, and
+updates the database record.
+
+If no JSON body is provided, the service parses the filename automatically.
+
+**Request body (all fields optional):**
+
+```json
+{
+  "title": "Inception",
+  "year": 2010
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "status": "identified",
+  "item": {
+    "id": "abc123def456",
+    "title": "Inception",
+    "year": "2010",
+    "tmdb_id": 27205,
+    "has_metadata": true,
+    "has_poster": true,
+    "director": "Christopher Nolan",
+    "genres": ["Action", "Science Fiction", "Adventure"],
+    "cast": ["Leonardo DiCaprio", "Joseph Gordon-Levitt"],
+    "rating": 8.4,
+    "overview": "A thief who steals corporate secrets..."
+  }
+}
+```
+
+**Response 404:** `{ "error": "Media not found" }` or `{ "error": "File not found on disk" }`
+**Response 500:** `{ "error": "Identification failed" }`
+
+---
+
 ### `PUT /api/media/<media_id>/metadata`
 
 Update metadata fields for a media item. Also updates the on-disk JSON sidecar.

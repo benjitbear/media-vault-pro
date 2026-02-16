@@ -1,4 +1,4 @@
-"""Content ingestion routes: upload, download, articles, books."""
+"""Content ingestion routes: upload, download, articles, books, identification."""
 
 import uuid
 from datetime import datetime
@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 
+from ..constants import VIDEO_EXTENSIONS
 from ..utils import detect_media_type, format_size, generate_media_id
 
 content_bp = Blueprint("content", __name__)
@@ -75,6 +76,14 @@ def api_upload():
         }
         srv.app_state.upsert_media(item)
         results.append({"file": dest.name, "id": media_id, "media_type": media_type})
+
+        # Queue an identify job for video files to enrich with TMDB metadata
+        if dest.suffix.lower() in VIDEO_EXTENSIONS:
+            srv.app_state.create_job(
+                title=dest.stem,
+                source_path=str(dest),
+                job_type="identify",
+            )
 
     srv._cache = None
     srv.app_state.broadcast("library_updated", {})

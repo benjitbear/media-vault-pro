@@ -1,6 +1,7 @@
-"""
-Runtime validation tests.
+"""Runtime validation tests — integration tests that read real media files.
+
 Verifies that ripped file durations closely match TMDB metadata runtimes.
+These tests are automatically skipped when no real media is present.
 """
 
 import json
@@ -8,6 +9,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.integration
 
 
 def get_file_duration_seconds(file_path: str) -> float:
@@ -28,9 +31,9 @@ def get_file_duration_seconds(file_path: str) -> float:
 
 def load_metadata_for_file(file_path: str) -> dict:
     """Load the metadata JSON that corresponds to a media file."""
-    from src.utils import get_data_dir
+    from src.utils import get_media_root
 
-    metadata_dir = get_data_dir() / "metadata"
+    metadata_dir = get_media_root() / "data" / "metadata"
     stem = Path(file_path).stem
     meta_file = metadata_dir / f"{stem}.json"
     if meta_file.exists():
@@ -44,9 +47,12 @@ def load_metadata_for_file(file_path: str) -> dict:
 
 def _discover_media_with_runtime():
     """Find all ripped files that have both a real file and TMDB runtime."""
-    from src.utils import load_config
+    from src.config import load_config
 
-    config = load_config()
+    try:
+        config = load_config()
+    except Exception:
+        return []
     library = Path(config["output"]["base_directory"])
 
     if not library.exists():
@@ -127,9 +133,9 @@ class TestRuntimeValidationUnit:
 
     def test_metadata_loads_for_real_files(self):
         """Metadata JSON files should be loadable and well-formed."""
-        from src.utils import get_data_dir
+        from src.utils import get_media_root
 
-        meta_dir = get_data_dir() / "metadata"
+        meta_dir = get_media_root() / "data" / "metadata"
         if not meta_dir.exists():
             pytest.skip("No metadata directory")
 

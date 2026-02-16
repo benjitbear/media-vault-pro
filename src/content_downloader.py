@@ -774,6 +774,10 @@ class ContentDownloader:
         elif job_type == "podcast":
             result = self.subscribe_podcast(url)
             return result
+        elif job_type == "identify":
+            # Handled by content_worker directly — not by ContentDownloader
+            self.logger.debug("Identify job %s delegated to content_worker", job_id)
+            return None
         else:
             self.logger.warning("Unknown job type: %s", job_type)
             return None

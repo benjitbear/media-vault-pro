@@ -109,6 +109,60 @@ def api_scan():
     return jsonify({"status": "completed", "count": len(items)})
 
 
+# ── Media Identification ─────────────────────────────────────────
+
+
+@media_bp.route("/api/media/<media_id>/identify", methods=["POST"])
+def api_identify_media(media_id):
+    """Identify or re-identify a media item via TMDB.
+
+    Optional JSON body:
+        title: User-supplied title (overrides filename parsing).
+        year:  User-supplied year (overrides guessit).
+
+    If no body is provided, the service parses the filename automatically.
+    Returns the enriched media item on success.
+    """
+    srv = _server()
+    item = srv.app_state.get_media(media_id)
+    if not item:
+        return jsonify({"error": "Media not found"}), 404
+
+    file_path = item.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({"error": "File not found on disk"}), 404
+
+    data = request.get_json(silent=True) or {}
+    title_override = data.get("title")
+    year_override = data.get("year")
+    if year_override is not None:
+        try:
+            year_override = int(year_override)
+        except (ValueError, TypeError):
+            year_override = None
+
+    from ..services.media_identifier import MediaIdentifierService
+
+    identifier = MediaIdentifierService(
+        config=srv.config,
+        app_state=srv.app_state,
+    )
+    result = identifier.identify_file(
+        file_path,
+        title_override=title_override,
+        year_override=year_override,
+        media_id=media_id,
+    )
+
+    if not result:
+        return jsonify({"error": "Identification failed"}), 500
+
+    srv._cache = None
+    safe = {k: v for k, v in result.items() if k not in ("file_path", "poster_path")}
+    safe["has_poster"] = bool(result.get("poster_path"))
+    return jsonify({"status": "identified", "item": safe})
+
+
 # ── Metadata Editing ─────────────────────────────────────────────
 
 

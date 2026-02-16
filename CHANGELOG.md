@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Post-upload media identification pipeline**: Uploaded video files are now automatically
+  identified via `guessit` filename parsing + TMDB metadata lookup. Posters, cast, genres,
+  year, rating, and overview are enriched automatically in the background.
+- `MediaIdentifierService` in `src/services/media_identifier.py` — orchestrates filename
+  parsing → MediaInfo extraction → TMDB search → poster download → DB update.
+- `POST /api/media/<media_id>/identify` endpoint for manual (re-)identification of any
+  media item. Accepts optional `title` and `year` overrides in the JSON body.
+- `identify` job type: upload endpoint queues an identify job for each video file, processed
+  by the content worker thread in the background.
+- `guessit` added as a core dependency for structured filename parsing (title, year,
+  season/episode, codec, resolution, source).
+- Tests: `tests/test_media_identifier.py` — 27 tests covering filename parsing, identify flow,
+  upload integration, and the manual identify API endpoint.
+
 ## [0.3.0] - 2026-02-07
 
 ### Added

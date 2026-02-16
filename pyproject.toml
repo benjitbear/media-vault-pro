@@ -29,6 +29,7 @@ dependencies = [
     "Pillow>=10.2.0",
     "python-dotenv>=1.0.0",
     "werkzeug>=3.0.0",
+    "guessit>=3.8.0",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,7 @@ python_functions = ["test_*"]
 addopts = "-v --cov=src --cov-report=html --cov-report=term-missing"
 markers = [
     "unit: unit tests (fast, no external dependencies)",
+    "integration: integration tests that may access real media files",
 ]
 
 [tool.black]

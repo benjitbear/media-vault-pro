@@ -2,7 +2,45 @@
 Test fixtures and configuration for pytest
 """
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
+
+# ── Real-media write guard ───────────────────────────────────────
+# Prevent any test from accidentally creating dirs/files under the
+# real ~/Media folder.  Tests must use tmp_path or /tmp/* instead.
+
+_REAL_MEDIA = Path.home() / "Media"
+_original_mkdir = Path.mkdir
+
+
+def _guarded_mkdir(self, *args, **kwargs):
+    """Raise immediately if a test tries to mkdir inside ~/Media."""
+    try:
+        resolved = self.resolve()
+    except OSError:
+        resolved = self
+    if str(resolved).startswith(str(_REAL_MEDIA)):
+        raise RuntimeError(
+            f"Test attempted to create directory in real media root: {self}. "
+            "Use tmp_path or the test_config fixture instead."
+        )
+    return _original_mkdir(self, *args, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _block_real_media_writes(request, tmp_path, monkeypatch):
+    """Auto-use guard: redirect MEDIA_ROOT to a temp dir and block any
+    accidental mkdir under ~/Media.  Integration tests are exempt.
+    """
+    if request.node.get_closest_marker("integration"):
+        yield
+        return
+    # Redirect MEDIA_ROOT so get_data_dir() / get_media_root() use temp space
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path / "media_root"))
+    monkeypatch.setattr(Path, "mkdir", _guarded_mkdir)
+    yield
 
 
 @pytest.fixture(scope="session")

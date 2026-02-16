@@ -151,6 +151,23 @@ Images are cached locally in `MEDIA_ROOT/data/metadata/`.
 - `send_notification()` — macOS notifications (AppleScript, safely escaped)
 - File helpers — `is_media_file()`, `get_file_type()`, `get_file_size()`
 
+### `services/media_identifier.py` — Post-Upload Identification
+
+Identifies uploaded or unknown video files through a three-layer pipeline:
+
+1. **Filename parsing** — uses `guessit` to extract title, year, type (movie/episode),
+   resolution, codec, and source from any common naming convention.
+2. **MediaInfo extraction** — calls `MediaInfoClient` for duration, which serves as the
+   strongest disambiguation signal when TMDB returns multiple results.
+3. **TMDB search** — queries TMDB with the parsed title, year, and runtime hint via
+   `TMDBClient.search_tmdb()`, then downloads poster and backdrop artwork.
+
+The service saves a metadata JSON sidecar and updates the `media` table via `AppState`.
+
+**Entry points:**
+- Automatically via `identify` jobs queued by the upload endpoint
+- Manually via `POST /api/media/<id>/identify`
+
 ## Data Flow: Disc Rip
 
 ```
@@ -205,8 +222,21 @@ POST /api/upload (multipart form data)
 Save to uploads/ directory
        │
        ├─► generate_media_id(file_path)
-       ├─► AppState.add_media(...)
-       └─► return { uploaded: [...] }
+       ├─► AppState.upsert_media(...)  (initial record, title = filename)
+       ├─► return { uploaded: [...] }
+       │
+       └─► (video files only) Queue "identify" job
+                    │
+                    ▼
+           content_worker picks up identify job
+                    │
+                    ├─► guessit parses filename → title, year
+                    ├─► MediaInfo extracts duration, codec
+                    ├─► TMDB search (title + year + runtime hint)
+                    ├─► Download poster / backdrop
+                    ├─► Save metadata JSON sidecar
+                    ├─► AppState.upsert_media(...)  (enriched record)
+                    └─► broadcast("library_updated")
 ```
 
 ## Data Flow: Podcast Episode
